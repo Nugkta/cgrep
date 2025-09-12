@@ -148,3 +148,17 @@ artifacts/
 # Temporary files
 tmp/
 temp/
+start_jupyter.sh
+slurm*
+data/
+
+# Archive directories
+*/archive/
+archive/
+
+# Bootstrap evaluation directories (keep only summary CSV files)
+results/mibig1_bootstrap_evaluation/
+results/mibig3_bootstrap_evaluation/
+!results/mibig1_bootstrap_evaluation/bootstrap_analysis/mibig1_bootstrap_summary.csv
+!results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv
+external/protein-sequence-models
