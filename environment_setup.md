@@ -19,15 +19,18 @@ conda install numpy scipy pandas matplotlib seaborn scikit-learn statsmodels -c 
 conda install biopython tqdm pyyaml joblib -c conda-forge -c bioconda
 pip install fair-esm rdkit plotly umap-learn numba
 
-# 5. Clone and install protein-sequence-models locally
+# 5. Install multi-label classification packages
+pip install scikit-multilearn
+
+# 6. Clone and install protein-sequence-models locally
 git clone https://github.com/nugkta/protein-sequence-models.git external/protein-sequence-models
 pip install -e external/protein-sequence-models/
 
-# 6. Install other required custom packages
+# 7. Install other required custom packages
 pip install git+https://github.com/RistoAle97/centered-kernel-alignment
 # pip install maspr  # Install when needed
 
-# 7. Install cgrep package in development mode
+# 8. Install cgrep package in development mode
 pip install -e .
 
 ```

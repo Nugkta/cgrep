@@ -13,11 +13,7 @@ Usage:
     --save-dir /path/to/save
 
   # Single processing mode:
-  python scripts/umap/extract_average_embeddings.py single \
-    --checkpoint-path /path/to/checkpoint.tar \
-    --vocab-path vocab.json \
-    --corpus-path corpus.csv \
-    --save-dir /path/to/save
+
 """
 
 import torch

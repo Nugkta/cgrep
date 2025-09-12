@@ -148,3 +148,6 @@ artifacts/
 # Temporary files
 tmp/
 temp/
+start_jupyter.sh
+slurm*
+data/
