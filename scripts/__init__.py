@@ -1,1 +1,2 @@
-# Scripts package
+# Ensure scripts is importable as a package.
+

@@ -20,7 +20,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 # Add path for your models  
 sys.path.append('/home/u5bb/han00.u5bb/workspace/cgrep')
-from cgrep.models_multiclass import MultiLabelBiLSTMClassifier
+from cgrep.models_multiclass import MultiLabelBiLSTMClassifier  # legacy import; not used after switch
 
 # Stratified multilabel CV
 from skmultilearn.model_selection import IterativeStratification
@@ -310,7 +310,8 @@ def create_stratified_splits(df, class_cols, n_splits=5, random_state=42):
         stratifier = IterativeStratification(
             n_splits=n_splits, 
             order=2,
-            sample_distribution_per_fold=[1.0/n_splits]*n_splits
+            sample_distribution_per_fold=[1.0/n_splits]*n_splits,
+            random_state=random_state
         )
         splits = list(stratifier.split(indices, y_binary[indices]))
         splits = [(indices[train], indices[test]) for train, test in splits]
@@ -391,8 +392,8 @@ def compute_comprehensive_metrics(y_true, y_pred, y_proba, class_names):
     return metrics
 
 # -------- Model Evaluation -------------------------------------------------
-def evaluate_bilstm_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, seed=42):
-    """Evaluate BiLSTM model with given embedding."""
+def evaluate_linear_probe_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, seed=42):
+    """Evaluate mean-pooled embeddings with a shallow MLP (two layers) via One-vs-Rest."""
     print(f"\n{'='*70}")
     print(f"🔬 Evaluating: {model_name}")
     print(f"   Column: {emb_col} (dim={emb_dim})")
@@ -404,14 +405,11 @@ def evaluate_bilstm_model(df, cv_splits, emb_col, emb_dim, model_name, class_col
     
     all_y_true, all_y_pred, all_y_proba = [], [], []
     fold_results = []
-    
-    # Try to use GPU if available
-    try:
-        import torch
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        device = "cpu"
-    
+    from sklearn.preprocessing import MultiLabelBinarizer, StandardScaler
+    from sklearn.decomposition import PCA
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.multiclass import OneVsRestClassifier
+
     for fold_idx, (train_idx, test_idx) in enumerate(cv_splits):
         print(f"\n📁 Fold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
 
@@ -429,26 +427,44 @@ def evaluate_bilstm_model(df, cv_splits, emb_col, emb_dim, model_name, class_col
             print(f"   ❌ Not enough samples after validation (train={len(X_train)}, test={len(X_test)})")
             continue
 
-        # Train model
+        # Mean-pool to fixed vectors
+        Xtr = create_mean_pooled_features(X_train)
+        Xte = create_mean_pooled_features(X_test)
+        
+        # Labels -> multilabel
+        mlb = MultiLabelBinarizer()
+        Ytr = mlb.fit_transform([s.split(';') if s else [] for s in y_train])
+        Yte = mlb.transform([s.split(';') if s else [] for s in y_test])
+
+        # Train linear probe
         try:
-            model = MultiLabelBiLSTMClassifier(
-                embed_dim=emb_dim, hidden_dim=512, num_layers=2,
-                dropout_rate=0.2, pooling_strategy="mean",
-                lr=1e-4, batch_size=32, early_stopping_patience=10, max_epochs=150,
-                random_seed=seed, device=device
+            scaler = StandardScaler()
+            Xtr_s = scaler.fit_transform(Xtr)
+            Xte_s = scaler.transform(Xte)
+
+            # Optional PCA to help convergence and speed
+            pca = None
+            target_dim = 256 if Xtr_s.shape[1] > 256 else None
+            if target_dim is not None:
+                pca = PCA(n_components=target_dim, random_state=seed)
+                Xtr_s = pca.fit_transform(Xtr_s)
+                Xte_s = pca.transform(Xte_s)
+
+            base = MLPClassifier(
+                hidden_layer_sizes=(256, 128), activation='relu',
+                alpha=1e-4, learning_rate_init=1e-3, max_iter=200,
+                early_stopping=True, n_iter_no_change=10, random_state=seed,
+                verbose=False
             )
-            print(f"   🏋️  Training BiLSTM model...")
-            model.fit(X_train, y_train, n_folds=1, show_progress=True)
-            
-            # Predict and evaluate
-            print(f"   🔮 Making predictions on test set...")
-            y_proba = model.predict_proba(X_test)
-            y_true = model.mlb.transform([s.split(';') for s in y_test])
+            clf = OneVsRestClassifier(base, n_jobs=-1)
+            clf.fit(Xtr_s, Ytr)
+            y_proba = clf.predict_proba(Xte_s)
+            y_true = Yte
             y_pred = (y_proba > 0.5).astype(int)
-            
+
             # Compute fold metrics
             print(f"   📊 Computing metrics...")
-            fold_metrics = compute_comprehensive_metrics(y_true, y_pred, y_proba, model.mlb.classes_)
+            fold_metrics = compute_comprehensive_metrics(y_true, y_pred, y_proba, mlb.classes_)
             fold_metrics['fold'] = fold_idx
             # Store raw predictions for per-class analysis
             fold_metrics['y_true'] = y_true
@@ -480,7 +496,7 @@ def evaluate_bilstm_model(df, cv_splits, emb_col, emb_dim, model_name, class_col
     aggregate_y_proba = np.vstack(all_y_proba)
     
     aggregate_metrics = compute_comprehensive_metrics(
-        aggregate_y_true, aggregate_y_pred, aggregate_y_proba, model.mlb.classes_
+        aggregate_y_true, aggregate_y_pred, aggregate_y_proba, mlb.classes_
     )
     
     print(f"\n🎯 {model_name} - Final Results:")
@@ -493,7 +509,7 @@ def evaluate_bilstm_model(df, cv_splits, emb_col, emb_dim, model_name, class_col
         'embedding_column': emb_col,
         'fold_results': fold_results,
         'aggregate_metrics': aggregate_metrics,
-        'class_names': model.mlb.classes_.tolist()
+        'class_names': mlb.classes_.tolist()
     }
 
 def create_mean_pooled_features(embed_sequences):
@@ -656,8 +672,124 @@ def evaluate_pfam2vec_rf(df, cv_splits, class_cols, seed=42):
         'class_names': mlb.classes_.tolist()
     }
 
+def evaluate_pfam2vec_mlp(df, cv_splits, class_cols, seed=42):
+    """Evaluate P2V embeddings with shallow MLP classifier."""
+    print(f"\n{'='*70}")
+    print(f"🔬 Evaluating: Pfam2vec + MLP")
+    print(f"{'='*70}")
+    
+    # Check for pfam2vec_seq column
+    if 'pfam2vec_seq' not in df.columns:
+        print("❌ pfam2vec_seq column not found!")
+        return None
+    
+    # Create mean-pooled features from pfam2vec_seq
+    print(f"   🔄 Creating mean-pooled features from pfam2vec_seq...")
+    X_p2v = create_mean_pooled_features(df['pfam2vec_seq'].values)
+    print(f"   P2V feature matrix shape: {X_p2v.shape}")
+    
+    if X_p2v.shape[0] == 0:
+        print("❌ No valid P2V features created!")
+        return None
+    
+    # Prepare multi-label strings  
+    label_strings = [";".join([c for c in class_cols if row[c]==1])
+                     for _, row in df.iterrows()]
+    
+    all_y_true, all_y_pred, all_y_proba = [], [], []
+    fold_results = []
+    from sklearn.preprocessing import MultiLabelBinarizer, StandardScaler
+    from sklearn.decomposition import PCA
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.multiclass import OneVsRestClassifier
+    
+    for fold_idx, (train_idx, test_idx) in enumerate(cv_splits):
+        print(f"\n📁 Fold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
+        
+        X_train, X_test = X_p2v[train_idx], X_p2v[test_idx]
+        y_train_strings = [label_strings[i] for i in train_idx]
+        y_test_strings = [label_strings[i] for i in test_idx]
+        
+        try:
+            # Labels -> multilabel
+            mlb = MultiLabelBinarizer()
+            y_train = mlb.fit_transform([s.split(';') if s else [] for s in y_train_strings])
+            y_test = mlb.transform([s.split(';') if s else [] for s in y_test_strings])
+            
+            # Standardize features
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
+            
+            # Optional PCA to help convergence and speed
+            pca = None
+            target_dim = 256 if X_train_scaled.shape[1] > 256 else None
+            if target_dim is not None:
+                pca = PCA(n_components=target_dim, random_state=seed)
+                X_train_scaled = pca.fit_transform(X_train_scaled)
+                X_test_scaled = pca.transform(X_test_scaled)
+            
+            # Train shallow MLP
+            base = MLPClassifier(
+                hidden_layer_sizes=(256, 128), activation='relu',
+                alpha=1e-4, learning_rate_init=1e-3, max_iter=200,
+                early_stopping=True, n_iter_no_change=10, random_state=seed,
+                verbose=False
+            )
+            clf = OneVsRestClassifier(base, n_jobs=-1)
+            clf.fit(X_train_scaled, y_train)
+            y_proba = clf.predict_proba(X_test_scaled)
+            y_pred = (y_proba > 0.5).astype(int)
+            
+            # Compute fold metrics
+            fold_metrics = compute_comprehensive_metrics(y_test, y_pred, y_proba, mlb.classes_)
+            fold_metrics['fold'] = fold_idx
+            # Store raw predictions for per-class analysis
+            fold_metrics['y_true'] = y_test
+            fold_metrics['y_pred'] = y_pred
+            fold_metrics['y_proba'] = y_proba
+            fold_results.append(fold_metrics)
+            
+            # Collect for aggregate
+            all_y_true.append(y_test)
+            all_y_pred.append(y_pred)
+            all_y_proba.append(y_proba)
+            
+            print(f"   📊 Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
+                  f"Macro F1: {fold_metrics['macro_f1']:.4f}, "
+                  f"Macro AUC: {fold_metrics['macro_auc']:.4f}")
+            
+        except Exception as e:
+            print(f"   ❌ Error in fold {fold_idx}: {e}")
+            continue
+    
+    if not all_y_true:
+        return None
+    
+    # Aggregate all folds
+    aggregate_y_true = np.vstack(all_y_true)
+    aggregate_y_pred = np.vstack(all_y_pred)
+    aggregate_y_proba = np.vstack(all_y_proba)
+    
+    aggregate_metrics = compute_comprehensive_metrics(
+        aggregate_y_true, aggregate_y_pred, aggregate_y_proba, mlb.classes_
+    )
+    
+    print(f"\n🎯 Pfam2vec + MLP - Final Results:")
+    print(f"   Exact Match Accuracy: {aggregate_metrics['exact_match_accuracy']:.4f}")
+    print(f"   Macro F1: {aggregate_metrics['macro_f1']:.4f}")
+    print(f"   Macro AUC: {aggregate_metrics['macro_auc']:.4f}")
+    
+    return {
+        'model_name': "Pfam2vec + MLP",
+        'embedding_column': f"pfam2vec_seq ({X_p2v.shape[1]} features)",
+        'fold_results': fold_results,
+        'aggregate_metrics': aggregate_metrics,
+        'class_names': mlb.classes_.tolist()
+    }
+
 def evaluate_random_baseline(df, cv_splits, class_cols, seed=42):
-    """Evaluate random 256-dimensional baseline with BiLSTM."""
+    """Evaluate random 256-dimensional baseline with shallow MLP (mean-pooled)."""
     print(f"\n{'='*70}")
     print(f"🔬 Evaluating: Random 256D Baseline")
     print(f"{'='*70}")
@@ -674,9 +806,51 @@ def evaluate_random_baseline(df, cv_splits, class_cols, seed=42):
     df_random = df.copy()
     df_random['random_embeddings'] = random_embeddings
     
-    return evaluate_bilstm_model(
-        df_random, cv_splits, 'random_embeddings', 256, 
+    return evaluate_linear_probe_model(
+        df_random, cv_splits, 'random_embeddings', 256,
         "Random 256D Baseline", class_cols, seed
+    )
+
+
+def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
+    """Token-consistent random baseline: fixed random vector per Pfam domain, mean-pooled, strict linear probe."""
+    print(f"\n{'='*70}")
+    print(f"🔬 Evaluating: Improved Random Baseline (Fixed per PFM Domain)")
+    print(f"{'='*70}")
+
+    # Load domain sequences for MIBiG 3.0 from preprocessed pickle
+    try:
+        mibig_pkl = 'data/processed/bgc_product_classification/processed_mibig3/mibig3_preprocessed.pkl'
+        df_mibig = pd.read_pickle(mibig_pkl)
+        # Expect columns: bgc_id, domain_sequence (list of domain strings)
+        domain_map = dict(zip(df_mibig['bgc_id'], df_mibig['domain_sequence']))
+        print(f"   📊 Loaded domain sequences for {len(domain_map)} BGCs")
+    except Exception as e:
+        print(f"   ⚠️  Could not load MIBiG3 domain sequences: {e}")
+        print("   Falling back to simple random baseline...")
+        return evaluate_random_baseline(df, cv_splits, class_cols, seed)
+
+    # Build fixed random vectors per domain
+    rng = np.random.default_rng(seed)
+    dim = 256
+    unique_domains = set(d for seq in domain_map.values() for d in (seq or []))
+    scale = 1.0 / np.sqrt(dim)
+    domain_vec = {d: (rng.standard_normal(dim).astype(np.float32) * scale) for d in unique_domains}
+    if 'UNK' not in domain_vec:
+        domain_vec['UNK'] = (rng.standard_normal(dim).astype(np.float32) * scale)
+
+    # Create per-BGC sequences
+    rand_seqs = []
+    for _, row in df.iterrows():
+        seq = domain_map.get(row['bgc_id'], []) or []
+        mats = [domain_vec.get(tok, domain_vec['UNK']) for tok in seq]
+        rand_seqs.append(np.stack(mats, axis=0) if mats else np.zeros((0, dim), dtype=np.float32))
+
+    df_rand = df.copy()
+    df_rand['improved_random_embeddings'] = rand_seqs
+    return evaluate_linear_probe_model(
+        df_rand, cv_splits, 'improved_random_embeddings', 256,
+        "Improved Random Baseline (Fixed per PFM Domain)", class_cols, seed
     )
 
 def save_per_class_results(all_results, outdir):
@@ -801,9 +975,28 @@ def main():
                         help="Random seed")
     args = parser.parse_args()
 
+    # Set random seeds for reproducibility
+    print(f"🎲 Setting random seed to {args.seed} for reproducibility")
+    import random
+    import torch
+    
+    # Set all random seeds
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    if torch is not None and hasattr(torch, 'manual_seed'):
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(args.seed)
+            torch.cuda.manual_seed_all(args.seed)
+    
+    # For sklearn reproducibility
+    import os
+    os.environ['PYTHONHASHSEED'] = str(args.seed)
+
     print("🚀 MIBiG 3.0 Multi-Label Classification with Stratified CV")
     print(f"📁 Artifacts: {args.artifacts_dir}")
     print(f"📁 Output: {args.outdir}")
+    print(f"🌱 Random seed: {args.seed}")
     
     # Load data
     data = load_mibig3_data(args.artifacts_dir)
@@ -824,12 +1017,12 @@ def main():
     
     # Define models to evaluate
     models_to_evaluate = [
-        ("esm_init_last", "ESM Init Last + BiLSTM"),
-        ("esm_init_embedder", "ESM Init Embedder + BiLSTM"), 
-        ("random_init_last", "Random Init Last + BiLSTM"),
-        ("random_init_embedder", "Random Init Embedder + BiLSTM"),
-        ("esm_embeddings", "ESM Embeddings + BiLSTM"),
-        ("esm_bigcarp_concatenated", "ESM + BigCarp Concatenated + BiLSTM"),
+        ("esm_init_last", "ESM Init Last + Linear"),
+        ("esm_init_embedder", "ESM Init Embedder + Linear"), 
+        ("random_init_last", "Random Init Last + Linear"),
+        ("random_init_embedder", "Random Init Embedder + Linear"),
+        ("esm_embeddings", "ESM Embeddings + Linear"),
+        ("esm_bigcarp_concatenated", "ESM + BigCarp Concatenated + Linear"),
     ]
     
     all_results = []
@@ -876,7 +1069,7 @@ def main():
         print(f"   Embedding dimension: {emb_dim}")
         
         # Evaluate model
-        result = evaluate_bilstm_model(
+        result = evaluate_linear_probe_model(
             df_prep, cv_splits, emb_col, emb_dim, model_name, class_cols, args.seed
         )
         
@@ -886,24 +1079,33 @@ def main():
         else:
             print(f"❌ {model_name} failed!")
     
-    # Evaluate Pfam2vec + Random Forest
+    # Evaluate Pfam2vec models
     if data["pfam2vec"] is not None:
-        print(f"\n{'🔬' * 3} EVALUATING PFAM2VEC + RANDOM FOREST {'🔬' * 3}")
+        print(f"\n{'🔬' * 3} EVALUATING PFAM2VEC MODELS {'🔬' * 3}")
         
         df_prep, emb_col = prepare_embedding_data(data, "pfam2vec")
         if df_prep is not None:
             df_prep, class_cols = convert_product_classes_to_binary(df_prep)
             cv_splits = create_stratified_splits(df_prep, class_cols, n_splits=5, random_state=args.seed)
             
+            # Pfam2vec + Random Forest
             result = evaluate_pfam2vec_rf(df_prep, cv_splits, class_cols, args.seed)
             if result is not None:
                 all_results.append(result)
                 print(f"✅ Pfam2vec + Random Forest completed successfully!")
             else:
                 print(f"❌ Pfam2vec + Random Forest failed!")
+            
+            # Pfam2vec + MLP
+            result = evaluate_pfam2vec_mlp(df_prep, cv_splits, class_cols, args.seed)
+            if result is not None:
+                all_results.append(result)
+                print(f"✅ Pfam2vec + MLP completed successfully!")
+            else:
+                print(f"❌ Pfam2vec + MLP failed!")
     
-    # Evaluate Random Baseline
-    print(f"\n{'🔬' * 3} EVALUATING RANDOM 256D BASELINE {'🔬' * 3}")
+    # Evaluate Random Baselines
+    print(f"\n{'🔬' * 3} EVALUATING RANDOM BASELINES {'🔬' * 3}")
     
     # Use any available data for baseline (just need the labels)
     baseline_data = None
@@ -917,12 +1119,21 @@ def main():
         df_baseline, class_cols = convert_product_classes_to_binary(df_baseline)
         cv_splits = create_stratified_splits(df_baseline, class_cols, n_splits=5, random_state=args.seed)
         
+        # Original random baseline
         result = evaluate_random_baseline(df_baseline, cv_splits, class_cols, args.seed)
         if result is not None:
             all_results.append(result)
-            print(f"✅ Random Baseline completed successfully!")
+            print(f"✅ Random 256D Baseline completed successfully!")
         else:
-            print(f"❌ Random Baseline failed!")
+            print(f"❌ Random 256D Baseline failed!")
+
+        # Improved token-consistent baseline
+        result = evaluate_improved_random_baseline(df_baseline, cv_splits, class_cols, args.seed)
+        if result is not None:
+            all_results.append(result)
+            print(f"✅ Improved Random Baseline completed successfully!")
+        else:
+            print(f"❌ Improved Random Baseline failed!")
     
     # Create final comparison
     if all_results:
