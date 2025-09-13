@@ -392,7 +392,7 @@ def compute_comprehensive_metrics(y_true, y_pred, y_proba, class_names):
     return metrics
 
 # -------- Model Evaluation -------------------------------------------------
-def evaluate_linear_probe_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, seed=42):
+def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, seed=42):
     """Evaluate mean-pooled embeddings with a shallow MLP (two layers) via One-vs-Rest."""
     print(f"\n{'='*70}")
     print(f"🔬 Evaluating: {model_name}")
@@ -806,7 +806,7 @@ def evaluate_random_baseline(df, cv_splits, class_cols, seed=42):
     df_random = df.copy()
     df_random['random_embeddings'] = random_embeddings
     
-    return evaluate_linear_probe_model(
+    return evaluate_mlp_model(
         df_random, cv_splits, 'random_embeddings', 256,
         "Random 256D Baseline", class_cols, seed
     )
@@ -848,7 +848,7 @@ def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
 
     df_rand = df.copy()
     df_rand['improved_random_embeddings'] = rand_seqs
-    return evaluate_linear_probe_model(
+    return evaluate_mlp_model(
         df_rand, cv_splits, 'improved_random_embeddings', 256,
         "Improved Random Baseline (Fixed per PFM Domain)", class_cols, seed
     )
@@ -1017,12 +1017,12 @@ def main():
     
     # Define models to evaluate
     models_to_evaluate = [
-        ("esm_init_last", "ESM Init Last + Linear"),
-        ("esm_init_embedder", "ESM Init Embedder + Linear"), 
-        ("random_init_last", "Random Init Last + Linear"),
-        ("random_init_embedder", "Random Init Embedder + Linear"),
-        ("esm_embeddings", "ESM Embeddings + Linear"),
-        ("esm_bigcarp_concatenated", "ESM + BigCarp Concatenated + Linear"),
+        ("esm_init_last", "ESM Init Last + MLP"),
+        ("esm_init_embedder", "ESM Init Embedder + MLP"),
+        ("random_init_last", "Random Init Last + MLP"),
+        ("random_init_embedder", "Random Init Embedder + MLP"),
+        ("esm_embeddings", "ESM Embeddings + MLP"),
+        ("esm_bigcarp_concatenated", "ESM + BigCarp Concatenated + MLP"),
     ]
     
     all_results = []
@@ -1069,7 +1069,7 @@ def main():
         print(f"   Embedding dimension: {emb_dim}")
         
         # Evaluate model
-        result = evaluate_linear_probe_model(
+        result = evaluate_mlp_model(
             df_prep, cv_splits, emb_col, emb_dim, model_name, class_cols, args.seed
         )
         
