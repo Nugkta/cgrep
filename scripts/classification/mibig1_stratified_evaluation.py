@@ -423,7 +423,7 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
         Ytr = mlb.fit_transform([s.split(';') if s else [] for s in y_train])
         Yte = mlb.transform([s.split(';') if s else [] for s in y_test])
 
-        # Train linear probe
+        # Train MLP
         try:
             scaler = StandardScaler()
             Xtr_s = scaler.fit_transform(Xtr)
