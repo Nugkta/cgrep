@@ -162,3 +162,4 @@ results/mibig3_bootstrap_evaluation/
 !results/mibig1_bootstrap_evaluation/bootstrap_analysis/mibig1_bootstrap_summary.csv
 !results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv
 external/protein-sequence-models
+results/bgc_classification/** 
