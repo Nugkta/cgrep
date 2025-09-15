@@ -72,7 +72,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Define the prediction command
-COMMAND="python scripts/halogen_prediction/halogen_embedding_comparison_pipeline.py"
+COMMAND="python scripts/halogen_prediction/halogen_embedding_comparison_deep_mlp.py"
 
 # Log system information
 echo "Job started at: $(date)"

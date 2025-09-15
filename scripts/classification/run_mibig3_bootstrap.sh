@@ -56,7 +56,8 @@ if [ $EVAL_EXIT_CODE -eq 0 ]; then
         echo "📈 Performance Summary (Macro AUC Focus):"
         echo "Model,Macro_AUC_Mean,Macro_AUC_Std,95%_CI_Lower,95%_CI_Upper"
         tail -n +2 results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv | \
-        awk -F',' '{printf "%-35s %8.4f ± %6.4f [%7.4f, %7.4f]\n", $1, $2, $3, $4, $5}' | sort -k2 -nr
+        sort -t',' -k2 -nr | \
+        awk -F',' '{printf "%-35s %8.4f ± %6.4f [%7.4f, %7.4f]\n", $1, $2, $3, $4, $5}'
     fi
 else
     echo "❌ Bootstrap evaluation failed with exit code: $EVAL_EXIT_CODE"

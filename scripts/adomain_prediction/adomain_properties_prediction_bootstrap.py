@@ -402,24 +402,24 @@ class AdomainPropertiesPredictor:
 
         # Print analysis
         print("\\n" + "="*120)
-        print("BEST PERFORMING METHODS PER PROPERTY (by F1 score):")
+        print("BEST PERFORMING METHODS PER PROPERTY (by AUC-ROC):")
         print("-" * 80)
 
         for prop in self.properties:
             if prop in summary_results:
-                best_f1 = -1
+                best_auc = -1
                 best_method = None
 
                 for exp_name in self.all_experiments:
-                    if exp_name in summary_results[prop] and 'f1' in summary_results[prop][exp_name]:
-                        f1_mean = summary_results[prop][exp_name]['f1']['mean']
-                        if f1_mean > best_f1:
-                            best_f1 = f1_mean
+                    if exp_name in summary_results[prop] and 'auc' in summary_results[prop][exp_name]:
+                        auc_mean = summary_results[prop][exp_name]['auc']['mean']
+                        if auc_mean > best_auc:
+                            best_auc = auc_mean
                             best_method = exp_name
 
                 if best_method:
-                    stats = summary_results[prop][best_method]['f1']
-                    print(f"{prop:20} | {best_method:25} | F1: {stats['mean']:.3f} [{stats['ci_lower']:.3f}-{stats['ci_upper']:.3f}]")
+                    stats = summary_results[prop][best_method]['auc']
+                    print(f"{prop:20} | {best_method:25} | AUC: {stats['mean']:.3f} [{stats['ci_lower']:.3f}-{stats['ci_upper']:.3f}]")
 
     def save_results(self, summary_results, raw_results, output_dir):
         """Save results to JSON files"""
