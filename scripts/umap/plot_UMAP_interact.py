@@ -16,6 +16,17 @@ python scripts/umap/plot_UMAP_interact.py \
   --product_class_file data/processed/umap_label/pfam_product_classes_label.json \
   --plot_by_function_label \
   --function_labels_csv data/processed/umap_label/pfam_function_labels.csv
+
+  conda activate cgrep && srun --gpus=1 --time=00:10:00 python scripts/umap/plot_UMAP_interact.py \
+  data/processed/vocabularies/pfam_vocab_present_pid.json \
+  data/raw/Pfam-A.clans.csv \
+  artifacts/bigcarp/average_embeddings/random_init/embeddings_checkpoint_best_last.pt \
+  results \
+  --plot_by_product_class \
+  --tag random_init \
+  --product_class_file data/processed/umap_label/pfam_product_classes_label.json \
+  --plot_by_function_label \
+  --function_labels_csv data/processed/umap_label/pfam_function_labels.csv
 """
 
 import argparse
@@ -234,9 +245,9 @@ def create_static_plot(embed_df, technique, hue_col, title, palette='Paired'):
     
     # Enhance legend if present
     if ax.get_legend():
-        legend = ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', 
+        legend = ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left',
                           frameon=True, fancybox=False, shadow=False,
-                          title_fontsize=12, fontsize=10)
+                          title_fontsize=16, fontsize=14)
         legend.get_frame().set_edgecolor('black')
         legend.get_frame().set_linewidth(1)
     
@@ -250,8 +261,8 @@ def create_interactive_plot(embed_df, technique, hue_col, title):
         import plotly.express as px
         
         hover_data = ['domains']
-        if 'function_labels' in embed_df.columns:
-            hover_data.append('function_labels')
+        if hue_col != 'domains' and hue_col in embed_df.columns:
+            hover_data.append(hue_col)
             
         fig = px.scatter(embed_df, x=f'{technique}_1', y=f'{technique}_2',
                         color=hue_col, hover_data=hover_data, title=title)
@@ -328,12 +339,13 @@ def main():
         if not args.no_interactive:
             # Use the first available categorical column for coloring
             color_col = 'clans'
-            for col in ['product_classes', 'function_labels', 'presence']:
+            for col in ['function_labels', 'product_classes', 'presence']:
                 if col in embed_df.columns:
                     color_col = col
                     break
             
-            interactive_fig = create_interactive_plot(embed_df, args.technique, color_col, 
+            print(f"Interactive plot using label: {color_col}")
+            interactive_fig = create_interactive_plot(embed_df, args.technique, color_col,
                                                     f"Interactive {args.technique.upper()} Plot")
             if interactive_fig:
                 save_plot(interactive_fig, args.results_dir, args.tag, emb_name, 'interactive', timestamp)
