@@ -7,16 +7,16 @@ ESM-initialised checkpoint number: None
 Random checkpoint number: None
 
 Difference Statistics (ESM-initialised - Random):
-Mean difference: 0.047340
-Std difference: 0.058631
-Max difference: 0.128166
-Min difference: -0.228818
-Mean absolute difference: 0.061551
+Mean difference: 0.048974
+Std difference: 0.059044
+Max difference: 0.131973
+Min difference: -0.227344
+Mean absolute difference: 0.063154
 
 Frobenius Norms:
-ESM-initialised CKA matrix: 28.501200
-Random CKA matrix: 26.992685
-Difference matrix: 2.486766
+ESM-initialised CKA matrix: 28.503963
+Random CKA matrix: 26.943939
+Difference matrix: 2.531481
 
 Interpretation:
 - Small differences suggest convergent layer coordination

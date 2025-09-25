@@ -67,12 +67,12 @@ plt.rcParams.update({
     'axes.spines.right': False,
     'font.family': 'sans-serif',
     'font.sans-serif': ['Arial', 'DejaVu Sans', 'Liberation Sans'],
-    'font.size': 12,
-    'axes.labelsize': 14,
-    'axes.titlesize': 16,
-    'legend.fontsize': 11,
-    'xtick.labelsize': 11,
-    'ytick.labelsize': 11,
+    'font.size': 16,
+    'axes.labelsize': 20,
+    'axes.titlesize': 22,
+    'legend.fontsize': 16,
+    'xtick.labelsize': 16,
+    'ytick.labelsize': 16,
     'axes.grid': False,
     'legend.frameon': True,
     'legend.fancybox': False,
@@ -416,13 +416,13 @@ def main():
             linewidth=2.5, markersize=8, markerfacecolor='white', markeredgewidth=2,
             markeredgecolor=colors[3])
 
-    ax.set_xlabel('Training Epoch', fontweight='semibold')
-    ax.set_ylabel('CKA Similarity', fontweight='semibold')
-    ax.set_title('Evolution of Layer Similarities During Training\n(References: ESM-initialised & Random Embedders at Checkpoint 0)',
-                 fontweight='bold', pad=20)
+    ax.set_xlabel('Training Epoch')
+    ax.set_ylabel('CKA Similarity')
+    # ax.set_title('Evolution of Layer Similarities During Training\n(References: ESM-initialised & Random Embedders at Checkpoint 0)',
+    #              fontweight='bold', pad=20)
 
     # Enhanced legend styling
-    legend = ax.legend(fontsize=11, loc='best', frameon=True, fancybox=False, shadow=False,
+    legend = ax.legend(fontsize=16, loc='best', frameon=True, fancybox=False, shadow=False,
                       edgecolor='black', facecolor='white')
     legend.get_frame().set_linewidth(1)
 
@@ -432,7 +432,7 @@ def main():
     ax.set_ylim(0, 1.0)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(run_output_dir, 'cka_evolution_plot.png'), dpi=300, bbox_inches='tight',
+    plt.savefig(os.path.join(run_output_dir, 'cka_evolution_plot.pdf'), dpi=300, bbox_inches='tight',
                 facecolor='white', edgecolor='none')
     plt.close()
     
@@ -466,7 +466,7 @@ def main():
     
     print(f"\nAnalysis complete. Results saved to {run_output_dir}")
     print("Generated files:")
-    print(f"  - cka_evolution_plot.png: Main visualization with four curves")
+    print(f"  - cka_evolution_plot.pdf: Main visualization with four curves")
     print(f"  - cka_evolution_results.npy: Raw results data")
     print(f"  - results_summary.txt: Summary of findings")
     print(f"  - run_config.txt: Configuration used for this run")

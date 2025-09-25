@@ -65,12 +65,12 @@ plt.rcParams.update({
     'axes.spines.right': False,
     'font.family': 'sans-serif',
     'font.sans-serif': ['Arial', 'DejaVu Sans', 'Liberation Sans'],
-    'font.size': 12,
-    'axes.labelsize': 14,
-    'axes.titlesize': 16,
-    'legend.fontsize': 11,
-    'xtick.labelsize': 11,
-    'ytick.labelsize': 11,
+    'font.size': 20,
+    'axes.labelsize': 26,
+    'axes.titlesize': 28,
+    'legend.fontsize': 20,
+    'xtick.labelsize': 20,
+    'ytick.labelsize': 20,
     'axes.grid': False,
     'legend.frameon': True,
     'legend.fancybox': False,
@@ -95,7 +95,7 @@ def parse_args():
     parser.add_argument('--product_class_file', help='JSON file with product class mappings')
     parser.add_argument('--function_labels_csv', help='CSV with function labels')
     parser.add_argument('--no_interactive', action='store_true', help='Skip HTML plots')
-    
+
     args = parser.parse_args()
     
     
@@ -169,14 +169,14 @@ def save_plot(fig_or_path, results_dir, tag, emb_name, plot_type, timestamp):
     # Create subdirectory structure: results_dir/umap/tag/emb_name/
     subdir = os.path.join(results_dir, 'umap', tag, emb_name)
     os.makedirs(subdir, exist_ok=True)
-    save_path = os.path.join(subdir, f"umap_{plot_type}_{timestamp}.png")
+    save_path = os.path.join(subdir, f"umap_{plot_type}_{timestamp}.pdf")
     
     try:
         if hasattr(fig_or_path, 'savefig'):  # matplotlib figure
             fig_or_path.savefig(save_path, dpi=300, bbox_inches='tight', 
                                facecolor='white', edgecolor='none')
         else:  # plotly figure
-            fig_or_path.write_html(save_path.replace('.png', '.html'))
+            fig_or_path.write_html(save_path.replace('.pdf', '.html'))
         print(f"Saved {plot_type} plot: {save_path}")
     except Exception as e:
         print(f"Error saving {plot_type} plot: {e}")
@@ -187,6 +187,7 @@ def save_plot(fig_or_path, results_dir, tag, emb_name, plot_type, timestamp):
 def create_static_plot(embed_df, technique, hue_col, title, palette='Paired'):
     """Create a static matplotlib plot"""
     fig, ax = plt.subplots(figsize=(12, 10))
+    scatter_size = 50
     
     # Handle function labels with special color mapping
     if hue_col == 'function_labels' and 'function_labels' in embed_df.columns:
@@ -202,9 +203,9 @@ def create_static_plot(embed_df, technique, hue_col, title, palette='Paired'):
             colors = ['#2E86C1', '#28B463', '#F39C12', '#E74C3C', '#8E44AD', '#17A2B8',
                      '#FFC107', '#6F42C1', '#20C997', '#FD7E14', '#DC3545', '#6C757D']
             
-            sns.scatterplot(data=plot_df, x=f'{technique}_1', y=f'{technique}_2', 
-                          hue='function_labels', palette=colors[:len(top_functions)], 
-                          s=50, alpha=0.8, edgecolor='white', linewidth=0.3, ax=ax)
+            sns.scatterplot(data=plot_df, x=f'{technique}_1', y=f'{technique}_2',
+                          hue='function_labels', palette=colors[:len(top_functions)],
+                          s=scatter_size, alpha=0.8, edgecolor='white', linewidth=0.3, ax=ax)
         else:
             ax.text(0.5, 0.5, 'No function data available', ha='center', va='center', 
                    transform=ax.transAxes, fontsize=16)
@@ -213,30 +214,37 @@ def create_static_plot(embed_df, technique, hue_col, title, palette='Paired'):
         if hue_col in embed_df.columns:
             # Get top categories for cleaner visualization
             if embed_df[hue_col].dtype == 'object':
-                top_categories = embed_df[hue_col].value_counts().head(15).index
+                if hue_col == 'clans':
+                    # For clans, limit to top 8 for better color distinction
+                    top_categories = embed_df[hue_col].value_counts().head(8).index
+                else:
+                    top_categories = embed_df[hue_col].value_counts().head(15).index
                 plot_df = embed_df[embed_df[hue_col].isin(top_categories)]
             else:
                 plot_df = embed_df
-            
-            # Enhanced color palettes
+
+            # Enhanced color palettes with better distinction
             if hue_col == 'clans':
-                colors = sns.color_palette("Set3", n_colors=len(plot_df[hue_col].unique()))
+                # Use a custom palette with more distinct colors
+                clan_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+                              '#9467bd', '#8c564b', '#e377c2', '#17becf']
+                colors = clan_colors[:len(plot_df[hue_col].unique())]
             elif hue_col == 'product_classes':
                 colors = sns.color_palette("Set2", n_colors=len(plot_df[hue_col].unique()))
             else:
                 colors = sns.color_palette(palette, n_colors=len(plot_df[hue_col].unique()))
                 
-            sns.scatterplot(data=plot_df, x=f'{technique}_1', y=f'{technique}_2', 
-                          hue=hue_col, palette=colors, s=50, alpha=0.8, 
+            sns.scatterplot(data=plot_df, x=f'{technique}_1', y=f'{technique}_2',
+                          hue=hue_col, palette=colors, s=scatter_size, alpha=0.8,
                           edgecolor='white', linewidth=0.3, ax=ax)
         else:
-            ax.scatter(embed_df[f'{technique}_1'], embed_df[f'{technique}_2'], 
-                      s=50, alpha=0.7, c='#3498DB', edgecolor='white', linewidth=0.3)
+            ax.scatter(embed_df[f'{technique}_1'], embed_df[f'{technique}_2'],
+                      s=scatter_size, alpha=0.7, c='#3498DB', edgecolor='white', linewidth=0.3)
     
-    # Enhanced title and axis formatting
-    ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
-    ax.set_xlabel(f'{technique.upper()} 1', fontsize=14, fontweight='semibold')
-    ax.set_ylabel(f'{technique.upper()} 2', fontsize=14, fontweight='semibold')
+    # Enhanced axis formatting (title removed)
+    # ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
+    ax.set_xlabel(f'{technique.upper()} 1', fontsize=26)
+    ax.set_ylabel(f'{technique.upper()} 2', fontsize=26)
     
     # Remove ticks but keep axis lines clean
     ax.tick_params(left=False, bottom=False)
@@ -247,7 +255,7 @@ def create_static_plot(embed_df, technique, hue_col, title, palette='Paired'):
     if ax.get_legend():
         legend = ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left',
                           frameon=True, fancybox=False, shadow=False,
-                          title_fontsize=16, fontsize=14)
+                          title_fontsize=22, fontsize=20)
         legend.get_frame().set_edgecolor('black')
         legend.get_frame().set_linewidth(1)
     
@@ -265,8 +273,16 @@ def create_interactive_plot(embed_df, technique, hue_col, title):
             hover_data.append(hue_col)
             
         fig = px.scatter(embed_df, x=f'{technique}_1', y=f'{technique}_2',
-                        color=hue_col, hover_data=hover_data, title=title)
+                        color=hue_col, hover_data=hover_data)
         fig.update_traces(marker=dict(size=6, opacity=0.8))
+
+        # Update layout for larger fonts
+        fig.update_layout(
+            font=dict(size=20),
+            xaxis=dict(title=dict(text=f'{technique.upper()} 1', font=dict(size=26))),
+            yaxis=dict(title=dict(text=f'{technique.upper()} 2', font=dict(size=26))),
+            legend=dict(font=dict(size=20))
+        )
         return fig
     except ImportError:
         print("Plotly not available, skipping interactive plot")

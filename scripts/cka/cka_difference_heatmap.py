@@ -260,9 +260,9 @@ def create_heatmap_plot(cka_matrix, title, output_path, model_name=""):
     # Invert Y axis so Layer 0 is at the bottom
     ax.invert_yaxis()
 
-    ax.set_xlabel(f'Layers ({model_name})', fontweight='semibold')
-    ax.set_ylabel(f'Layers ({model_name})', fontweight='semibold')
-    ax.set_title(title, fontweight='bold', pad=20)
+    ax.set_xlabel(f'Layers ({model_name})')
+    ax.set_ylabel(f'Layers ({model_name})')
+    # ax.set_title(title, fontweight='bold', pad=20)
     plt.tight_layout()
 
     plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
@@ -310,10 +310,10 @@ def create_difference_plot(pretrained_cka, random_cka, output_path, checkpoint_i
     # Invert Y axis so Layer 0 is at the bottom
     ax.invert_yaxis()
 
-    ax.set_xlabel('Layers', fontweight='semibold')
-    ax.set_ylabel('Layers', fontweight='semibold')
-    ax.set_title(f'CKA Difference: ESM-initialised vs Random \n{checkpoint_info}',
-                 fontweight='bold', pad=20)
+    ax.set_xlabel('Layers')
+    ax.set_ylabel('Layers')
+    # ax.set_title(f'CKA Difference: ESM-initialised vs Random \n{checkpoint_info}',
+    #              fontweight='bold', pad=20)
     plt.tight_layout()
 
     plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
@@ -388,14 +388,14 @@ def main():
     create_heatmap_plot(
         pretrained_cka,
         f'CKA Self-Similarity: {pretrained_name}',
-        os.path.join(run_output_dir, 'pretrained_cka_heatmap.png'),
+        os.path.join(run_output_dir, 'pretrained_cka_heatmap.pdf'),
         pretrained_name
     )
     
     create_heatmap_plot(
         random_cka,
-        f'CKA Self-Similarity: {random_name}', 
-        os.path.join(run_output_dir, 'random_cka_heatmap.png'),
+        f'CKA Self-Similarity: {random_name}',
+        os.path.join(run_output_dir, 'random_cka_heatmap.pdf'),
         random_name
     )
     
@@ -406,7 +406,7 @@ def main():
     
     difference_matrix = create_difference_plot(
         pretrained_cka, random_cka,
-        os.path.join(run_output_dir, 'cka_difference_heatmap.png'),
+        os.path.join(run_output_dir, 'cka_difference_heatmap.pdf'),
         checkpoint_info
     )
     
@@ -467,9 +467,9 @@ def main():
     
     print(f"\nAnalysis complete. Results saved to {run_output_dir}")
     print("Generated files:")
-    print(f"  - pretrained_cka_heatmap.png: ESM-initialised model self-similarity")
-    print(f"  - random_cka_heatmap.png: Random model self-similarity")
-    print(f"  - cka_difference_heatmap.png: Difference plot (main result)")
+    print(f"  - pretrained_cka_heatmap.pdf: ESM-initialised model self-similarity")
+    print(f"  - random_cka_heatmap.pdf: Random model self-similarity")
+    print(f"  - cka_difference_heatmap.pdf: Difference plot (main result)")
     print(f"  - pretrained_cka_matrix.npy: Raw ESM-initialised CKA matrix")
     print(f"  - random_cka_matrix.npy: Raw random CKA matrix")
     print(f"  - cka_difference_matrix.npy: Raw difference matrix")
