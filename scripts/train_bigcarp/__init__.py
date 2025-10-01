@@ -1,1 +1,1 @@
-# Training scripts for BigCARP model
+# Training scripts for bigcarp model

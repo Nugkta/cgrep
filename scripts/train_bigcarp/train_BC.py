@@ -13,9 +13,9 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
-from tqdm.auto import tqdm  # Add this import for progress bars
+from tqdm.auto import tqdm
 
-# ----------- Custom imports from your own modules -----------
+# ----------- import the seqeuence_models packages -----------
 from sequence_models.convolutional import ByteNetLM
 from sequence_models.metrics import MaskedAccuracy
 from sequence_models.losses import MaskedCrossEntropyLoss
