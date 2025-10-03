@@ -1,8 +1,20 @@
 """
-This script extracts average embeddings from a trained ByteNetLM model for a given corpus of sequences.
+This script extracts average embeddings from a trained bigcarp model for a given corpus of sequences.
 It supports two modes:
 1. Bulk processing: Process all checkpoint files in a directory
 2. Single processing: Process a single checkpoint file
+
+Arguments:
+  mode: Either 'single' or 'bulk'
+  --checkpoint-path: Path to a single checkpoint file (.tar) [single mode only]
+  --checkpoint-dir: Directory containing checkpoint files (.tar) [bulk mode only]
+  --vocab-path: Path to vocabulary JSON file containing 'specials', 'domains', and 'size'
+  --corpus-path: Path to corpus CSV file with columns ['domains', 'function', 'split']
+  --save-dir: Directory to save extracted embedding files (.pt)
+  --min-special-id: Number of special tokens to skip when extracting embeddings (default: 4)
+  --layer-indices: Layer indices to extract embeddings from. Use 'last' for final layer or space-separated integers (default: last)
+  --frozen-embeddings: If set, model uses frozen pre-trained embeddings (n_frozen_embs parameter)
+  --conditional: If set, prepend functional token at the start of sequences (default: False, unconditional)
 
 Usage:
   # Bulk processing mode:
@@ -13,6 +25,13 @@ Usage:
     --save-dir /path/to/save
 
   # Single processing mode:
+  python scripts/umap/extract_average_embeddings.py single \
+    --checkpoint-path artifacts/bigcarp/bigcarp_models/run_esm_init_frozen/checkpoint_best.tar \
+    --vocab-path data/processed/vocabularies/pfam_vocab_present.json \
+    --corpus-path data/processed/bgc_corpus/antidb_pfam_corpus.csv \
+    --save-dir artifacts/bigcarp/average_embeddings/esm_init_frozen \
+    --frozen-embeddings \
+    --layer-indices last
 
 """
 
@@ -48,16 +67,21 @@ def load_vocab_info(vocab_path):
     
     return vocab_info, specials, domains, padding_idx, mask_idx, n_tokens
 
-def load_corpus_data(corpus_path, specials, domains, mask_idx, padding_idx):
+def load_corpus_data(corpus_path, specials, domains, mask_idx, padding_idx, conditional=False):
     """Load and preprocess corpus data."""
     df = pd.read_csv(corpus_path).fillna("")
     tokens_list = []
-    
+
     for _, row in df.iterrows():
-        func_token = row["function"]
-        func_id = specials.get(func_token, specials["*"])
-        sequence_ids = [func_id]
-        
+        if conditional:
+            # Include functional token at the start
+            func_token = row["function"]
+            func_id = specials.get(func_token, specials["*"])
+            sequence_ids = [func_id]
+        else:
+            # Unconditional: start with empty sequence
+            sequence_ids = []
+
         for d in row["domains"].split(";"):
             d = d.strip()
             sequence_ids.append(domains.get(d, domains["UNK"]))
@@ -118,17 +142,18 @@ def process_single_checkpoint(args):
     """Process a single checkpoint file."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    
+
     # Load vocabulary info
     vocab_info, specials, domains, padding_idx, mask_idx, n_tokens = load_vocab_info(args.vocab_path)
-    
+
     # Handle frozen embeddings
     n_frozen_embs = None
     if args.frozen_embeddings:
         n_frozen_embs = len(domains) - 1
-    
+
     # Load corpus data
-    dataloader = load_corpus_data(args.corpus_path, specials, domains, mask_idx, padding_idx)
+    dataloader = load_corpus_data(args.corpus_path, specials, domains, mask_idx, padding_idx,
+                                   conditional=args.conditional)
     
     # Create model
     model = create_model(n_tokens, mask_idx, n_frozen_embs, device)
@@ -150,26 +175,27 @@ def process_bulk_checkpoints(args):
     """Process all checkpoint files in a directory."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-    
+
     # Find all checkpoint files
     checkpoint_files = find_checkpoint_files(args.checkpoint_dir)
-    
+
     if not checkpoint_files:
         print(f"No .tar checkpoint files found in {args.checkpoint_dir}")
         return
-    
+
     print(f"Found {len(checkpoint_files)} checkpoint files")
-    
+
     # Load vocabulary info
     vocab_info, specials, domains, padding_idx, mask_idx, n_tokens = load_vocab_info(args.vocab_path)
-    
+
     # Handle frozen embeddings
     n_frozen_embs = None
     if args.frozen_embeddings:
         n_frozen_embs = len(domains) - 1
-    
+
     # Load corpus data
-    dataloader = load_corpus_data(args.corpus_path, specials, domains, mask_idx, padding_idx)
+    dataloader = load_corpus_data(args.corpus_path, specials, domains, mask_idx, padding_idx,
+                                   conditional=args.conditional)
     
     # Create model
     model = create_model(n_tokens, mask_idx, n_frozen_embs, device)
@@ -204,6 +230,7 @@ def parse_arguments():
     common_parser.add_argument("--min-special-id", type=int, default=4, help="Special tokens to skip")
     common_parser.add_argument("--layer-indices", nargs="+", default=["last"], help="Layer indices to extract (separate file per layer)")
     common_parser.add_argument("--frozen-embeddings", action="store_true", help="Use frozen embeddings")
+    common_parser.add_argument("--conditional", action="store_true", help="Include functional token at the start of sequences")
     
     # Single checkpoint mode
     single_parser = subparsers.add_parser("single", parents=[common_parser], help="Process a single checkpoint")

@@ -1,3 +1,28 @@
+"""
+Train BiGCARP model for Masked Language Modeling on Protein Domain Sequences
+
+This script trains a ByteNet-based language model BiGCARP on protein domain sequences using
+masked language modeling (MLM). The model learns to predict masked domain tokens,
+optionally conditioned on functional annotations.
+
+Example Usage:
+    python scripts/train_bigcarp/train_BC.py \\
+        --fcorpus data/processed/bgc_corpus/antidb_pfam_corpus.csv \\
+        --fvocab data/processed/vocabularies/pfam_vocab_present.json \\
+        --out_fpath artifacts/bigcarp/bigcarp_models \\
+        --esm_emb_fpath artifacts/bigcarp/esm_embeddings/esm1b_pfam_embs_present.pt \\
+        --pretrain \\
+        --epochs 200 \\
+        --batch_size 512
+
+Outputs:
+    - checkpoint_best.tar: Best validation model
+    - checkpoint_latest.tar: Most recent checkpoint
+    - metrics.csv: Training and validation loss/accuracy per epoch
+    - loss_plot.png: Training and validation loss curves
+    - final_embedder.pt: Final learned embedding weights
+"""
+
 import argparse
 import json
 import os
@@ -22,29 +47,6 @@ from sequence_models.losses import MaskedCrossEntropyLoss
 from sequence_models.collaters import _pad
 from sequence_models.utils import parse_fasta
 # -------------------------------------------------------------
-
-# Helper function to determine if output is going to a file
-def is_output_redirected():
-    return not sys.stdout.isatty()
-
-# Configure tqdm settings based on output destination
-def get_tqdm_config():
-    if is_output_redirected():
-        # If outputting to a file or pipe, use these settings
-        return {
-            'disable': False,
-            'leave': False,
-            'ncols': 80,
-            'mininterval': 5.0,      # Update at most every 5 seconds
-            'miniters': 20,          # Update at most every 20 iterations
-            'bar_format': '{desc}: {percentage:3.0f}% | {n_fmt}/{total_fmt} [{elapsed}<{remaining}]'
-        }
-    else:
-        # If outputting to terminal, use these settings
-        return {
-            'leave': True,
-            'unit': "batch",
-        }
 
 def get_parser():
     """
@@ -86,8 +88,8 @@ def get_parser():
                         help='If set, use the "wide" version instead of the "slim" version of ByteNet.')
     parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate.')
     parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs.')
-    parser.add_argument('--unconditional', action='store_true',
-                        help='If set, do not prepend a special function token.')
+    parser.add_argument('--conditional', action='store_true',
+                        help='If set, prepend a special function token.')
     parser.add_argument('--ar', action='store_true',
                         help='If set, use autoregressive model (causal).')
     parser.add_argument('--cp_fpath', type=str, default=None,
@@ -101,8 +103,25 @@ def load_data(args):
     """
     Loads and prepares the CSV data, domain-to-token dictionary, and splits into train/test.
 
+    Args:
+        args: Command-line arguments containing:
+            - fcorpus: Path to CSV with columns [domains, function, split]
+            - fvocab: Path to JSON with vocabulary definitions
+            - conditional: If True, prepend function tokens
+
     Returns:
-        train_tokens, test_tokens, specials, domains, domain_tokens, n_tokens, padding_idx, mask_idx
+        tuple: (train_tokens, test_tokens, specials, domains, domain_tokens,
+                n_tokens, padding_idx, mask_idx, data_fpath, df)
+            - train_tokens (list[Tensor]): Training sequences as token IDs
+            - test_tokens (list[Tensor]): Test sequences as token IDs
+            - specials (dict): Special token name -> token ID mapping
+            - domains (dict): Domain name -> token ID mapping
+            - domain_tokens (np.array): Array of all domain token IDs
+            - n_tokens (int): Total vocabulary size
+            - padding_idx (int): Token ID for padding
+            - mask_idx (int): Token ID for masking
+            - data_fpath (str): Path to pre-trained data (from args.fdata)
+            - df (DataFrame): Original corpus dataframe
     """
     # Read CSV
     df = pd.read_csv(args.fcorpus)
@@ -118,11 +137,12 @@ def load_data(args):
     # Prepare the token sequences
     tokens_list = []
     for _, row in df.iterrows():
-        if args.unconditional:
-            t = []
-        else:
-            # Prepend the function token if not unconditional
+        if args.conditional:
+            # Prepend the function token if conditional
             t = [specials[row['function']]]
+        else:
+            # Unconditional: start with empty sequence
+            t = []
 
         for d in row['domains'].split(';'):
             if d in domains:
@@ -132,7 +152,7 @@ def load_data(args):
                 t.append(domains['UNK'])
         tokens_list.append(torch.tensor(t))
 
-    # Split the data into train, test
+    # Split the data into train, test (the split is already done in the csv file)
     train_tokens = [tokens_list[i] for i in df[df['split'] == 'train'].index]
     test_tokens  = [tokens_list[i] for i in df[df['split'] == 'test'].index]
 
@@ -150,8 +170,8 @@ def mlm_collate_fn(batch, domain_tokens, mask_idx, padding_idx):
     Args:
         batch: A batch of token sequences.
         domain_tokens: Array of possible domain tokens.
-        mask_idx: Special index used for masking in the vocabulary.
-        padding_idx: Special index used for padding.
+        mask_idx: Special index used for masking in the vocabulary (#)
+        padding_idx: Special index used for padding (-)
 
     Returns:
         src: Padded input sequences with random masking (15%).
@@ -236,7 +256,6 @@ def prepare_dataloaders(train_tokens, test_tokens, domain_tokens, mask_idx,
                          num_workers=num_workers, collate_fn=collate_wrapper)
     return dl_train, dl_test, ds_train, ds_test
 
-# don't need the pretraining for this purpose
 
 def maybe_load_pretrained_embeddings(args, model, data_fpath, specials, domains, domain_tokens):
     """
@@ -288,7 +307,7 @@ def create_model(args, n_tokens, mask_idx, n_frozen_embs=None):
         kernel_size=args.kernel_size,
         r=args.r,
         slim=(not args.wide),
-        padding_idx=mask_idx,
+        padding_idx=mask_idx, # in bigcarp implementation, the padding index is the same as the mask index
         causal=args.ar,
         final_ln=True,
         activation='gelu',
@@ -317,81 +336,34 @@ def load_checkpoint_if_exists(args, model, optimizer):
         print(f"Checkpoint directory {cp_dir} does not exist, starting from scratch.")
         return initial_epoch, total_steps, best_val_loss, best_val_acc, best_epoch
 
-    # Priority order: latest checkpoint, then best checkpoint, then periodic checkpoints
-    checkpoint_candidates = []
-    
-    # Check for latest checkpoint (highest priority)
+    # Check for latest checkpoint only
     latest_ckpt = os.path.join(cp_dir, 'checkpoint_latest.tar')
-    if os.path.exists(latest_ckpt):
-        checkpoint_candidates.append(('latest', latest_ckpt))
-    
-    # Check for best checkpoint
-    best_ckpt = os.path.join(cp_dir, 'checkpoint_best.tar')
-    if os.path.exists(best_ckpt):
-        checkpoint_candidates.append(('best', best_ckpt))
-    
-    # Check for periodic checkpoints (legacy and new format)
-    all_files = [f for f in os.listdir(cp_dir) if f.startswith('checkpoint') and f.endswith('.tar')]
-    periodic_checkpoints = []
-    
-    for fname in all_files:
-        if fname.startswith('checkpoint_epoch'):
-            # New format: checkpoint_epoch{N}.tar
-            epoch_str = fname.replace('checkpoint_epoch', '').replace('.tar', '')
-            try:
-                epoch_num = int(epoch_str)
-                periodic_checkpoints.append((epoch_num, os.path.join(cp_dir, fname)))
-            except ValueError:
-                continue
-        elif fname.startswith('checkpoint') and fname not in ['checkpoint_latest.tar', 'checkpoint_best.tar']:
-            # Legacy format: checkpoint{N}.tar
-            epoch_str = fname.replace('checkpoint', '').replace('.tar', '')
-            try:
-                epoch_num = int(epoch_str)
-                periodic_checkpoints.append((epoch_num, os.path.join(cp_dir, fname)))
-            except ValueError:
-                continue
-    
-    # Add the most recent periodic checkpoint as a candidate
-    if periodic_checkpoints:
-        periodic_checkpoints.sort(key=lambda x: x[0], reverse=True)  # Sort by epoch descending
-        checkpoint_candidates.append(('periodic', periodic_checkpoints[0][1]))
-
-    if not checkpoint_candidates:
-        print(f"No valid checkpoints found in {cp_dir}, starting from scratch.")
+    if not os.path.exists(latest_ckpt):
+        print(f"No checkpoint_latest.tar found in {cp_dir}, starting from scratch.")
         return initial_epoch, total_steps, best_val_loss, best_val_acc, best_epoch
 
-    # Load the highest priority checkpoint
-    checkpoint_type, ckpt_path = checkpoint_candidates[0]
-    print(f"Loading {checkpoint_type} checkpoint from {ckpt_path}")
-    
+    print(f"Loading checkpoint from {latest_ckpt}")
+
     try:
-        sd = torch.load(ckpt_path, map_location='cpu')
+        sd = torch.load(latest_ckpt, map_location='cpu')
         model.load_state_dict(sd['model_state_dict'])
         optimizer.load_state_dict(sd['optimizer_state_dict'])
-        
+
         # Extract information from checkpoint
         total_steps = sd.get('step', 0)
-        if 'epoch' in sd:
-            initial_epoch = sd['epoch'] + 1
-        else:
-            # Legacy checkpoint format - try to extract from filename
-            if 'epoch' in os.path.basename(ckpt_path):
-                epoch_str = os.path.basename(ckpt_path).replace('checkpoint_epoch', '').replace('checkpoint', '').replace('.tar', '')
-                try:
-                    initial_epoch = int(epoch_str) + 1
-                except ValueError:
-                    initial_epoch = 0
-        
-        # Try to load best model metrics if available
-        if checkpoint_type == 'best' or 'val_loss' in sd:
-            best_val_loss = sd.get('val_loss', float('inf'))
-            best_val_acc = sd.get('val_acc', 0.0)
-            best_epoch = sd.get('epoch', -1)
-            print(f"Loaded best model metrics: loss={best_val_loss:.4f}, acc={best_val_acc:.4f}, epoch={best_epoch+1}")
-            
+        initial_epoch = sd.get('epoch', 0) + 1
+
+        # Load best model metrics if available
+        best_val_loss = sd.get('val_loss', float('inf'))
+        best_val_acc = sd.get('val_acc', 0.0)
+        best_epoch = sd.get('best_epoch', -1)
+
+        print(f"Resuming from epoch {initial_epoch}, step {total_steps}")
+        if best_epoch >= 0:
+            print(f"Best model so far: loss={best_val_loss:.4f}, acc={best_val_acc:.4f}, epoch={best_epoch+1}")
+
     except Exception as e:
-        print(f"Failed to load checkpoint {ckpt_path}: {e}")
+        print(f"Failed to load checkpoint {latest_ckpt}: {e}")
         print("Starting from scratch.")
         return 0, 0, float('inf'), 0.0, -1
 
@@ -410,10 +382,8 @@ def train_one_epoch(
 
     losses, accuracies, counts = [], [], []
     n_total = len(dl_train.dataset)
-    
-    # Use optimized progress bar settings
-    tqdm_config = get_tqdm_config()
-    progress_bar = tqdm(dl_train, desc=f"Training Epoch {e+1}/{epochs}", **tqdm_config)
+
+    progress_bar = tqdm(dl_train, desc=f"Training Epoch {e+1}/{epochs}", leave=True, unit="batch")
     
     # Collect epoch-wide metrics
     epoch_loss = 0.0
@@ -451,16 +421,12 @@ def train_one_epoch(
         
         batch_count += 1
         
-        # Less frequent progress bar updates 
+        # Less frequent progress bar updates
         if batch_count % display_interval == 0 or batch_count == len(dl_train):
             progress_bar.set_postfix({
                 'loss': f"{avg_loss:.4f}",
                 'acc': f"{avg_accu:.4f}"
             })
-            
-            # For redirected output, periodically print summary instead of relying on the progress bar
-            if is_output_redirected() and (batch_count % (display_interval * 10) == 0):
-                print(f"Training Batch {batch_count}/{len(dl_train)} | Loss: {avg_loss:.4f} | Acc: {avg_accu:.4f}")
 
         epoch_loss += loss.item() * masked_positions
         epoch_acc += accu.item() * masked_positions
@@ -493,13 +459,11 @@ def test_one_epoch(
 
     losses, accuracies, counts = [], [], []
     n_total = len(dl_test.dataset)
-    
-    # Use optimized progress bar settings
-    tqdm_config = get_tqdm_config()
-    progress_bar = tqdm(dl_test, desc=f"Validation Epoch {e+1}/{epochs}", **tqdm_config)
+
+    progress_bar = tqdm(dl_test, desc=f"Validation Epoch {e+1}/{epochs}", leave=True, unit="batch")
     
     batch_count = 0
-    display_interval = 10  # Log stats every 10 batches
+    display_interval = 30  # Log stats every 30 batches
 
     with torch.no_grad():
         for i, batch in enumerate(progress_bar):
@@ -517,20 +481,16 @@ def test_one_epoch(
             counts.append(masked_positions)
             
             batch_count += 1
-            
+
             # Less frequent progress bar updates
             if batch_count % display_interval == 0 or batch_count == len(dl_test):
                 avg_loss = sum(losses) / sum(counts) if sum(counts) > 0 else 0
                 avg_accu = sum(accuracies) / sum(counts) if sum(counts) > 0 else 0
-                
+
                 progress_bar.set_postfix({
                     'loss': f"{avg_loss:.4f}",
                     'acc': f"{avg_accu:.4f}"
                 })
-                
-                # For redirected output, periodically print summary instead of relying on the progress bar
-                if is_output_redirected() and (batch_count % (display_interval * 10) == 0):
-                    print(f"Validation Batch {batch_count}/{len(dl_test)} | Loss: {avg_loss:.4f} | Acc: {avg_accu:.4f}")
 
     if not counts: 
         print("No test data processed, skipping metrics write.")
@@ -629,7 +589,6 @@ def main():
     )
 
     # -------------------- 4. Build and/or load model ------------
-    
     n_frozen_embs = None
     esm_embeddings = None
     if args.pretrain or args.freeze:
@@ -665,7 +624,7 @@ def main():
     }, checkpoint_fname)
     print(f"Initial checkpoint saved at {checkpoint_fname}")
 
-    # -------------------- 7. Checkpoints ------------------------
+    # -------------------- 7. Load Checkpoints if exists ------------------------
     initial_epoch, total_steps, best_val_loss, best_val_acc, best_epoch = load_checkpoint_if_exists(args, model, optimizer)
 
     # -------------------- 8. Training Loop ----------------------
@@ -704,7 +663,7 @@ def main():
         )
         
         # --- Checkpoint Saving ---
-        # 1. Always save latest checkpoint (for recovery)
+        # 1. Save latest checkpoint
         save_checkpoint(model, optimizer, e, total_steps, args, 'latest', val_loss, val_acc)
         
         # 2. Save best checkpoint if this is the best validation performance
@@ -742,12 +701,12 @@ def main():
         plt.savefig(os.path.join(args.out_fpath, 'loss_plot.png'))
         plt.close()
 
-    # -------------------- 10. Save the final embeddings ----------------
+    # -------------------- 10. Save the final embeddings matrix ----------------
     # this is the static embeddings in the embed layer (not contextualized)
     with torch.no_grad():
         final_embs = model.embedder.embedder.weight.detach().cpu()
     torch.save(final_embs, os.path.join(args.out_fpath, 'final_embedder.pt'))
-    print("All done!")
+    print("Done")
 
 if __name__ == '__main__':
     main()
