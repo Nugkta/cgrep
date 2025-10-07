@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Bootstrap Evaluation for MIBiG Classification Models.
 
@@ -14,7 +13,6 @@ The bootstrap evaluation provides:
 
 Typical usage:
     python bootstrap_evaluation.py --dataset mibig3 --n_seeds 10 --focus_metric macro_auc
-
 
 """
 
@@ -621,7 +619,7 @@ def main():
     print(f"Results saved in: {args.outdir}/bootstrap_analysis/")
     print(f"Summary CSV: {args.outdir}/bootstrap_analysis/{args.dataset.lower()}_bootstrap_summary.csv")
     
-    # Show performance summary table
+    # Show performance summary table for focus metric
     print(f"\nPerformance Summary ({args.focus_metric.replace('_', ' ').title()}):")
     print("=" * 80)
     for _, row in summary_df.iterrows():
@@ -631,6 +629,51 @@ def main():
         ci_lower = row['95% CI Lower']
         ci_upper = row['95% CI Upper']
         print(f"{model:<35} {mean_val:8.4f} ± {std_val:6.4f} [{ci_lower:7.4f}, {ci_upper:7.4f}]")
+
+    # Show comprehensive table ranked by Macro AUC-ROC
+    print(f"\nComprehensive Performance Table (Ranked by Macro AUC-ROC):")
+    print("=" * 120)
+    
+    # Create a comprehensive summary table ranked by macro_auc
+    macro_auc_df = create_bootstrap_summary_table(statistics, 'macro_auc')
+    
+    # Print header
+    print(f"{'Model':<35} {'Macro AUC':<20} {'Macro F1':<20} {'Weighted AUC':<20} {'Exact Match Acc':<20}")
+    print("-" * 120)
+    
+    # Print each model's performance with CI
+    for _, row in macro_auc_df.iterrows():
+        model = row['Model']
+        
+        # Get statistics for all metrics
+        model_stats = statistics[model]
+        
+        # Format each metric with mean ± std [CI_lower, CI_upper]
+        macro_auc_mean = model_stats.get('macro_auc_mean', np.nan)
+        macro_auc_std = model_stats.get('macro_auc_std', np.nan)
+        macro_auc_ci_lower = model_stats.get('macro_auc_ci_lower', np.nan)
+        macro_auc_ci_upper = model_stats.get('macro_auc_ci_upper', np.nan)
+        macro_auc_str = f"{macro_auc_mean:.3f}±{macro_auc_std:.3f} [{macro_auc_ci_lower:.3f},{macro_auc_ci_upper:.3f}]"
+        
+        macro_f1_mean = model_stats.get('macro_f1_mean', np.nan)
+        macro_f1_std = model_stats.get('macro_f1_std', np.nan)
+        macro_f1_ci_lower = model_stats.get('macro_f1_ci_lower', np.nan)
+        macro_f1_ci_upper = model_stats.get('macro_f1_ci_upper', np.nan)
+        macro_f1_str = f"{macro_f1_mean:.3f}±{macro_f1_std:.3f} [{macro_f1_ci_lower:.3f},{macro_f1_ci_upper:.3f}]"
+        
+        weighted_auc_mean = model_stats.get('weighted_auc_mean', np.nan)
+        weighted_auc_std = model_stats.get('weighted_auc_std', np.nan)
+        weighted_auc_ci_lower = model_stats.get('weighted_auc_ci_lower', np.nan)
+        weighted_auc_ci_upper = model_stats.get('weighted_auc_ci_upper', np.nan)
+        weighted_auc_str = f"{weighted_auc_mean:.3f}±{weighted_auc_std:.3f} [{weighted_auc_ci_lower:.3f},{weighted_auc_ci_upper:.3f}]"
+        
+        exact_match_mean = model_stats.get('exact_match_accuracy_mean', np.nan)
+        exact_match_std = model_stats.get('exact_match_accuracy_std', np.nan)
+        exact_match_ci_lower = model_stats.get('exact_match_accuracy_ci_lower', np.nan)
+        exact_match_ci_upper = model_stats.get('exact_match_accuracy_ci_upper', np.nan)
+        exact_match_str = f"{exact_match_mean:.3f}±{exact_match_std:.3f} [{exact_match_ci_lower:.3f},{exact_match_ci_upper:.3f}]"
+        
+        print(f"{model:<35} {macro_auc_str:<20} {macro_f1_str:<20} {weighted_auc_str:<20} {exact_match_str:<20}")
 
     return 0
 

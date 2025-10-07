@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 MIBiG 3.0 Multi-Label Classification with Stratified Cross-Validation
 ======================================================================
@@ -7,13 +5,19 @@ MIBiG 3.0 Multi-Label Classification with Stratified Cross-Validation
 This script evaluates multiple embedding approaches for BGC product class prediction
 using MIBiG 3.0 data with stratified 5-fold cross-validation.
 
+!!Bootstrap Integration:
+    This script is designed to be run as part of bootstrap evaluation via bootstrap_evaluation.py.
+    The bootstrap script calls this evaluation script multiple times with different random seeds
+    to assess model performance variability and statistical significance. Can also be run 
+    standalone for single-seed evaluation.
+
 Embedding Types Evaluated:
     - ESM-initialized BigCarp (last layer & embedder)
     - Random-initialized BigCarp (last layer & embedder)
     - ESM embeddings (pretrained)
     - ESM + BigCarp concatenated
     - Pfam2vec embeddings
-    - Random baselines (simple and domain-consistent)
+    - Random baseline (domain-consistent)
 
 Models:
     - Multi-layer perceptron (MLP) with One-vs-Rest strategy
@@ -26,7 +30,11 @@ Metrics:
     - Per-class AUC-ROC
 
 Usage:
-    python mibig3_stratified_evaluation.py --artifacts_dir <path> --outdir <path> --seed <int>
+    # Standalone evaluation
+    python mibig3_stratified_evaluation.py --artifacts_dir <path> --outdir <path> --seed 42
+    
+    # Bootstrap evaluation (recommended)
+    python bootstrap_evaluation.py --dataset mibig3 --n_seeds 10 --focus_metric macro_auc
 
 Output Files:
     - mibig3_comparison.csv: Aggregate performance across all models
@@ -252,9 +260,6 @@ def _validate_and_prepare_XY(X_raw, y_raw, emb_dim):
         if arr.ndim == 2 and arr.shape[1] == emb_dim:
             X.append(xi)
             y.append(yi)
-        elif arr.ndim == 1 and arr.shape[0] == emb_dim:
-            X.append([xi])
-            y.append(yi)
     return X, y
 
 def create_stratified_splits(df, class_cols, n_splits=5, random_state=42):
@@ -282,11 +287,13 @@ def create_stratified_splits(df, class_cols, n_splits=5, random_state=42):
         stratifier = IterativeStratification(
             n_splits=n_splits,
             order=2,
-            sample_distribution_per_fold=[1.0/n_splits]*n_splits,
-            random_state=random_state
+            sample_distribution_per_fold=[1.0/n_splits]*n_splits
         )
-        return [(indices[train], indices[test]) for train, test in stratifier.split(indices, y_binary[indices])]
-    except:
+        splits = list(stratifier.split(indices, y_binary[indices]))
+        splits = [(indices[train], indices[test]) for train, test in splits]
+        return splits
+    except Exception as e:
+        print(f"   [WARNING] Iterative stratification failed, falling back to standard KFold.")
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
         return list(kf.split(np.arange(len(df))))
 
@@ -359,9 +366,8 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
     Pipeline:
         1. Mean-pool variable-length embeddings to fixed vectors
         2. Standardize features
-        3. Optional PCA if dimension > 256
-        4. Train shallow MLP (256->128 units) with One-vs-Rest strategy
-        5. Predict with 0.5 threshold
+        3. Train shallow MLP (512->256 units) with One-vs-Rest strategy
+        4. Predict with 0.5 threshold
 
     Args:
         df (pandas.DataFrame): DataFrame with embeddings and class columns
@@ -413,13 +419,8 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
             Xtr_s = scaler.fit_transform(Xtr)
             Xte_s = scaler.transform(Xte)
 
-            if Xtr_s.shape[1] > 256:
-                pca = PCA(n_components=256, random_state=seed)
-                Xtr_s = pca.fit_transform(Xtr_s)
-                Xte_s = pca.transform(Xte_s)
-
             base = MLPClassifier(
-                hidden_layer_sizes=(256, 128), activation='relu',
+                hidden_layer_sizes=(512, 256), activation='relu',
                 alpha=1e-4, learning_rate_init=1e-3, max_iter=200,
                 early_stopping=True, n_iter_no_change=10, random_state=seed,
                 verbose=False
@@ -619,27 +620,6 @@ def evaluate_pfam2vec_rf(df, cv_splits, class_cols, seed=42):
 
 def evaluate_random_baseline(df, cv_splits, class_cols, seed=42):
     """
-    Evaluate simple random baseline with Gaussian embeddings.
-
-    Generates random 256-dimensional embeddings (Gaussian noise) with random sequence lengths.
-
-    Args:
-        df (pandas.DataFrame): DataFrame with class columns (embeddings generated randomly)
-        cv_splits (list): List of (train_idx, test_idx) tuples
-        class_cols (list): List of class column names
-        seed (int): Random seed (default: 42)
-
-    Returns:
-        dict: Results from evaluate_mlp_model() on random embeddings
-    """
-    np.random.seed(seed)
-    random_embeddings = [np.random.randn(np.random.randint(5, 51), 256).tolist() for _ in range(len(df))]
-    df_random = df.copy()
-    df_random['random_embeddings'] = random_embeddings
-    return evaluate_mlp_model(df_random, cv_splits, 'random_embeddings', 256, "Random 256D Baseline", class_cols, seed)
-
-def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
-    """
     Evaluate domain-consistent random baseline.
 
     Each unique Pfam domain gets a fixed random 256-dimensional vector. BGC embeddings
@@ -654,14 +634,10 @@ def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
 
     Returns:
         dict: Results from evaluate_mlp_model() on domain-consistent random embeddings.
-            Falls back to simple random baseline if domain sequences unavailable.
     """
-    try:
-        mibig_pkl = 'data/processed/bgc_product_classification/processed_mibig3/mibig3_preprocessed.pkl'
-        df_mibig = pd.read_pickle(mibig_pkl)
-        domain_map = dict(zip(df_mibig['bgc_id'], df_mibig['domain_sequence']))
-    except:
-        return evaluate_random_baseline(df, cv_splits, class_cols, seed)
+    mibig_pkl = 'data/processed/bgc_product_classification/processed_mibig3/mibig3_preprocessed.pkl'
+    df_mibig = pd.read_pickle(mibig_pkl)
+    domain_map = dict(zip(df_mibig['bgc_id'], df_mibig['domain_sequence']))
 
     rng = np.random.default_rng(seed)
     dim = 256
@@ -677,9 +653,9 @@ def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
         rand_seqs.append(np.stack(mats, axis=0) if mats else np.zeros((0, dim), dtype=np.float32))
 
     df_rand = df.copy()
-    df_rand['improved_random_embeddings'] = rand_seqs
-    return evaluate_mlp_model(df_rand, cv_splits, 'improved_random_embeddings', 256,
-                            "Improved Random Baseline", class_cols, seed)
+    df_rand['random_embeddings'] = rand_seqs
+    return evaluate_mlp_model(df_rand, cv_splits, 'random_embeddings', 256,
+                            "Random Baseline", class_cols, seed)
 
 def save_per_class_results(all_results, outdir):
     """
@@ -838,10 +814,6 @@ def main():
         cv_splits = create_stratified_splits(df_baseline, class_cols, n_splits=5, random_state=args.seed)
 
         result = evaluate_random_baseline(df_baseline, cv_splits, class_cols, args.seed)
-        if result:
-            all_results.append(result)
-
-        result = evaluate_improved_random_baseline(df_baseline, cv_splits, class_cols, args.seed)
         if result:
             all_results.append(result)
 
