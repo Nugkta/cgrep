@@ -3,10 +3,10 @@
 """
 MIBiG 3.0 Multi-Label Classification with Stratified Cross-Validation
 ================================================================
-• Uses MIBiG 3.0 embedding files from artifacts/classification/mibig3/
-• Stratified 5-fold CV for fair comparison  
-• Multiple embedding approaches with BiLSTM models
-• Includes pfam2vec with Random Forest and random baseline
+- Uses MIBiG 3.0 embedding files from artifacts/classification/mibig3/
+- Stratified 5-fold CV for fair comparison
+- Multiple embedding approaches with BiLSTM models
+- Includes pfam2vec with Random Forest and random baseline
 """
 
 import os, json, argparse, pathlib, random, pickle, warnings
@@ -34,14 +34,14 @@ def extract_missing_embeddings(artifacts_dir, seed=42):
     random_embedder_path = f"{artifacts_dir}/random_init/mibig3_bigcarp_embedder.pkl"
     
     if not os.path.exists(random_embedder_path):
-        print(f"🔄 Missing random_init_embedder. Please run:")
+        print(f"Missing random_init_embedder. Please run:")
         print(f"   Run the MIBiG 3.0 preprocessing notebook to extract embeddings")
         print(f"   Or manually extract using the extraction function")
-        print(f"⚠️  Skipping random_init_embedder evaluation")
+        print(f"WARNING: Skipping random_init_embedder evaluation")
 
 def load_mibig3_data(artifacts_dir="artifacts/classification/mibig3"):
     """Load MIBiG 3.0 embedding data."""
-    print("📂 Loading MIBiG 3.0 embedding data...")
+    print("Loading MIBiG 3.0 embedding data...")
     
     # File paths
     esm_init_last = f"{artifacts_dir}/esm_init/mibig3_bigcarp_last.pkl"
@@ -66,20 +66,20 @@ def load_mibig3_data(artifacts_dir="artifacts/classification/mibig3"):
             if os.path.exists(file_path):
                 df = pd.read_pickle(file_path)
                 data[key] = df
-                print(f"   ✅ Loaded {key}: {df.shape}")
+                print(f"   [OK] Loaded {key}: {df.shape}")
                 print(f"      Columns: {list(df.columns)}")
             else:
-                print(f"   ❌ File not found: {file_path}")
+                print(f"   [ERROR] File not found: {file_path}")
                 data[key] = None
         except Exception as e:
-            print(f"   ❌ Error loading {key}: {e}")
+            print(f"   [ERROR] Error loading {key}: {e}")
             data[key] = None
     
     return data
 
 def convert_product_classes_to_binary(df):
     """Convert semicolon-separated product_class to binary columns."""
-    print("\n🔄 Converting product classes to binary columns...")
+    print("\nConverting product classes to binary columns...")
     
     # Ensure we're working with a copy to avoid SettingWithCopyWarning
     df = df.copy()
@@ -119,7 +119,7 @@ def tensor_to_list(x):
 
 def prepare_embedding_data(data, embedding_type):
     """Prepare specific embedding type for evaluation."""
-    print(f"\n🔧 Preparing {embedding_type} data...")
+    print(f"\nPreparing {embedding_type} data...")
     
     if embedding_type == "esm_init_last":
         df = data["esm_init_last"]
@@ -162,12 +162,12 @@ def prepare_embedding_data(data, embedding_type):
         esm_df = data["esm_embeddings"]
         bigcarp_df = data["random_init_last"]  # Use random as default
         if esm_df is not None and bigcarp_df is not None:
-            print("   🔧 Creating concatenated ESM + BigCarp embeddings...")
+            print("   Creating concatenated ESM + BigCarp embeddings...")
             concat_df = create_concatenated_embeddings(esm_df, bigcarp_df)
             if concat_df is not None:
                 return concat_df.copy(), 'concatenated_embeddings'
     
-    print(f"   ❌ Failed to prepare {embedding_type} data")
+    print(f"   [ERROR] Failed to prepare {embedding_type} data")
     return None, None
 
 def create_concatenated_embeddings(esm_df, bigcarp_df):
@@ -177,7 +177,7 @@ def create_concatenated_embeddings(esm_df, bigcarp_df):
     print(f"   Found {len(common_ids)} common BGC IDs for concatenation")
     
     if len(common_ids) == 0:
-        print("   ❌ No common BGC IDs found for concatenation")
+        print("   [ERROR] No common BGC IDs found for concatenation")
         return None
     
     # Filter to common IDs and align
@@ -214,21 +214,21 @@ def create_concatenated_embeddings(esm_df, bigcarp_df):
             })
             
         except Exception as e:
-            print(f"   ⚠️  Failed to concatenate for {bgc_id}: {e}")
+            print(f"   WARNING: Failed to concatenate for {bgc_id}: {e}")
             continue
-    
+
     if not concatenated_data:
-        print("   ❌ No successful concatenations")
+        print("   [ERROR] No successful concatenations")
         return None
-        
+
     concat_df = pd.DataFrame(concatenated_data)
-    print(f"   ✅ Created {len(concat_df)} concatenated embeddings")
-    
+    print(f"   [OK] Created {len(concat_df)} concatenated embeddings")
+
     # Check dimensions
     sample_concat = concat_df['concatenated_embeddings'].iloc[0]
     if isinstance(sample_concat, list) and len(sample_concat) > 0:
         concat_dim = len(sample_concat[0])
-        print(f"   📊 Concatenated dimension: {concat_dim}")
+        print(f"   Concatenated dimension: {concat_dim}")
     
     return concat_df
 
@@ -282,21 +282,21 @@ def _validate_and_prepare_XY(X_raw, y_raw, emb_dim, max_bad_report=5, split_name
         coerced = _coerce_to_seq2d(xi, emb_dim)
         if coerced is None:
             if bad < max_bad_report:
-                print(f"   ⚠️  Dropping {split_name} sample #{i}: invalid shape/type for embedding")
+                print(f"   WARNING: Dropping {split_name} sample #{i}: invalid shape/type for embedding")
             bad += 1
             continue
         X.append(coerced)
         y.append(yi)
     if bad > 0:
-        print(f"   🧹 {split_name.capitalize()} cleanup: kept {len(X)}/{len(X_raw)} (dropped {bad})")
+        print(f"   {split_name.capitalize()} cleanup: kept {len(X)}/{len(X_raw)} (dropped {bad})")
     return X, y, len(X), bad
 
 # -------- Stratified CV Functions ------------------------------------------
 def create_stratified_splits(df, class_cols, n_splits=5, random_state=42):
     """Create stratified CV splits for multi-label classification."""
     y_binary = df[class_cols].values
-    
-    print(f"\n📊 Class Distribution Analysis:")
+
+    print(f"\nClass Distribution Analysis:")
     class_counts = y_binary.sum(axis=0)
     for i, col in enumerate(class_cols):
         print(f"  {col}: {class_counts[i]:4d} samples ({class_counts[i]/len(df)*100:5.1f}%)")
@@ -315,15 +315,15 @@ def create_stratified_splits(df, class_cols, n_splits=5, random_state=42):
         )
         splits = list(stratifier.split(indices, y_binary[indices]))
         splits = [(indices[train], indices[test]) for train, test in splits]
-        
-        print(f"✅ Using stratified multi-label {n_splits}-fold CV")
+
+        print(f"[OK] Using stratified multi-label {n_splits}-fold CV")
         return splits
     except Exception as e:
-        print(f"⚠️  Stratified CV failed: {e}")
+        print(f"WARNING: Stratified CV failed: {e}")
         # Fallback to KFold
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
         splits = list(kf.split(np.arange(len(df))))
-        print(f"✅ Using standard {n_splits}-fold CV")
+        print(f"[OK] Using standard {n_splits}-fold CV")
         return splits
 
 # -------- Metrics Functions ------------------------------------------------
@@ -395,7 +395,7 @@ def compute_comprehensive_metrics(y_true, y_pred, y_proba, class_names):
 def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, seed=42):
     """Evaluate mean-pooled embeddings with a shallow MLP (two layers) via One-vs-Rest."""
     print(f"\n{'='*70}")
-    print(f"🔬 Evaluating: {model_name}")
+    print(f"Evaluating: {model_name}")
     print(f"   Column: {emb_col} (dim={emb_dim})")
     print(f"{'='*70}")
     
@@ -411,7 +411,7 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
     from sklearn.multiclass import OneVsRestClassifier
 
     for fold_idx, (train_idx, test_idx) in enumerate(cv_splits):
-        print(f"\n📁 Fold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
+        print(f"\nFold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
 
         # Prepare data (raw)
         X_train_raw = [df.iloc[i][emb_col] for i in train_idx]
@@ -424,7 +424,7 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
         X_test,  y_test,  kept_te, drop_te = _validate_and_prepare_XY(X_test_raw,  y_test_raw,  emb_dim, split_name="test")
 
         if len(X_train) == 0 or len(X_test) == 0:
-            print(f"   ❌ Not enough samples after validation (train={len(X_train)}, test={len(X_test)})")
+            print(f"   [ERROR] Not enough samples after validation (train={len(X_train)}, test={len(X_test)})")
             continue
 
         # Mean-pool to fixed vectors
@@ -463,7 +463,7 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
             y_pred = (y_proba > 0.5).astype(int)
 
             # Compute fold metrics
-            print(f"   📊 Computing metrics...")
+            print(f"   Computing metrics...")
             fold_metrics = compute_comprehensive_metrics(y_true, y_pred, y_proba, mlb.classes_)
             fold_metrics['fold'] = fold_idx
             # Store raw predictions for per-class analysis
@@ -476,21 +476,21 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
             all_y_true.append(y_true)
             all_y_pred.append(y_pred)
             all_y_proba.append(y_proba)
-            
-            print(f"   📊 Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
+
+            print(f"   Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
                   f"Macro F1: {fold_metrics['macro_f1']:.4f}, "
                   f"Macro AUC: {fold_metrics['macro_auc']:.4f}")
-            
+
         except Exception as e:
-            print(f"   ❌ Error in fold {fold_idx}: {e}")
+            print(f"   [ERROR] Error in fold {fold_idx}: {e}")
             continue
-    
+
     if not all_y_true:
-        print(f"❌ No successful folds for {model_name}")
+        print(f"[ERROR] No successful folds for {model_name}")
         return None
-    
+
     # Aggregate all folds
-    print(f"\n   📈 Aggregating results across all folds...")
+    print(f"\n   Aggregating results across all folds...")
     aggregate_y_true = np.vstack(all_y_true)
     aggregate_y_pred = np.vstack(all_y_pred)
     aggregate_y_proba = np.vstack(all_y_proba)
@@ -498,8 +498,8 @@ def evaluate_mlp_model(df, cv_splits, emb_col, emb_dim, model_name, class_cols, 
     aggregate_metrics = compute_comprehensive_metrics(
         aggregate_y_true, aggregate_y_pred, aggregate_y_proba, mlb.classes_
     )
-    
-    print(f"\n🎯 {model_name} - Final Results:")
+
+    print(f"\n{model_name} - Final Results:")
     print(f"   Exact Match Accuracy: {aggregate_metrics['exact_match_accuracy']:.4f}")
     print(f"   Macro F1: {aggregate_metrics['macro_f1']:.4f}")
     print(f"   Macro AUC: {aggregate_metrics['macro_auc']:.4f}")
@@ -562,21 +562,21 @@ def create_mean_pooled_features(embed_sequences):
 def evaluate_pfam2vec_rf(df, cv_splits, class_cols, seed=42):
     """Evaluate P2V embeddings with Random Forest classifier."""
     print(f"\n{'='*70}")
-    print(f"🔬 Evaluating: Pfam2vec + Random Forest")
+    print(f"Evaluating: Pfam2vec + Random Forest")
     print(f"{'='*70}")
-    
+
     # Check for pfam2vec_seq column
     if 'pfam2vec_seq' not in df.columns:
-        print("❌ pfam2vec_seq column not found!")
+        print("[ERROR] pfam2vec_seq column not found!")
         return None
-    
+
     # Create mean-pooled features from pfam2vec_seq
-    print(f"   🔄 Creating mean-pooled features from pfam2vec_seq...")
+    print(f"   Creating mean-pooled features from pfam2vec_seq...")
     X_p2v = create_mean_pooled_features(df['pfam2vec_seq'].values)
     print(f"   P2V feature matrix shape: {X_p2v.shape}")
-    
+
     if X_p2v.shape[0] == 0:
-        print("❌ No valid P2V features created!")
+        print("[ERROR] No valid P2V features created!")
         return None
     
     # Prepare multi-label strings  
@@ -591,7 +591,7 @@ def evaluate_pfam2vec_rf(df, cv_splits, class_cols, seed=42):
     fold_results = []
     
     for fold_idx, (train_idx, test_idx) in enumerate(cv_splits):
-        print(f"\n📁 Fold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
+        print(f"\nFold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
         
         X_train, X_test = X_p2v[train_idx], X_p2v[test_idx]
         y_train, y_test = y_binary[train_idx], y_binary[test_idx]
@@ -638,28 +638,28 @@ def evaluate_pfam2vec_rf(df, cv_splits, class_cols, seed=42):
             all_y_true.append(y_test)
             all_y_pred.append(class_predictions)
             all_y_proba.append(class_probabilities)
-            
-            print(f"   📊 Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
+
+            print(f"   Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
                   f"Macro F1: {fold_metrics['macro_f1']:.4f}, "
                   f"Macro AUC: {fold_metrics['macro_auc']:.4f}")
-            
+
         except Exception as e:
-            print(f"   ❌ Error in fold {fold_idx}: {e}")
+            print(f"   [ERROR] Error in fold {fold_idx}: {e}")
             continue
-    
+
     if not all_y_true:
         return None
-    
+
     # Aggregate all folds
     aggregate_y_true = np.vstack(all_y_true)
     aggregate_y_pred = np.vstack(all_y_pred)
     aggregate_y_proba = np.vstack(all_y_proba)
-    
+
     aggregate_metrics = compute_comprehensive_metrics(
         aggregate_y_true, aggregate_y_pred, aggregate_y_proba, mlb.classes_
     )
-    
-    print(f"\n🎯 Pfam2vec + Random Forest - Final Results:")
+
+    print(f"\nPfam2vec + Random Forest - Final Results:")
     print(f"   Exact Match Accuracy: {aggregate_metrics['exact_match_accuracy']:.4f}")
     print(f"   Macro F1: {aggregate_metrics['macro_f1']:.4f}")
     print(f"   Macro AUC: {aggregate_metrics['macro_auc']:.4f}")
@@ -675,21 +675,21 @@ def evaluate_pfam2vec_rf(df, cv_splits, class_cols, seed=42):
 def evaluate_pfam2vec_mlp(df, cv_splits, class_cols, seed=42):
     """Evaluate P2V embeddings with shallow MLP classifier."""
     print(f"\n{'='*70}")
-    print(f"🔬 Evaluating: Pfam2vec + MLP")
+    print(f"Evaluating: Pfam2vec + MLP")
     print(f"{'='*70}")
-    
+
     # Check for pfam2vec_seq column
     if 'pfam2vec_seq' not in df.columns:
-        print("❌ pfam2vec_seq column not found!")
+        print("[ERROR] pfam2vec_seq column not found!")
         return None
-    
+
     # Create mean-pooled features from pfam2vec_seq
-    print(f"   🔄 Creating mean-pooled features from pfam2vec_seq...")
+    print(f"   Creating mean-pooled features from pfam2vec_seq...")
     X_p2v = create_mean_pooled_features(df['pfam2vec_seq'].values)
     print(f"   P2V feature matrix shape: {X_p2v.shape}")
-    
+
     if X_p2v.shape[0] == 0:
-        print("❌ No valid P2V features created!")
+        print("[ERROR] No valid P2V features created!")
         return None
     
     # Prepare multi-label strings  
@@ -704,7 +704,7 @@ def evaluate_pfam2vec_mlp(df, cv_splits, class_cols, seed=42):
     from sklearn.multiclass import OneVsRestClassifier
     
     for fold_idx, (train_idx, test_idx) in enumerate(cv_splits):
-        print(f"\n📁 Fold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
+        print(f"\nFold {fold_idx + 1}/5: Train={len(train_idx)}, Test={len(test_idx)}")
         
         X_train, X_test = X_p2v[train_idx], X_p2v[test_idx]
         y_train_strings = [label_strings[i] for i in train_idx]
@@ -754,28 +754,28 @@ def evaluate_pfam2vec_mlp(df, cv_splits, class_cols, seed=42):
             all_y_true.append(y_test)
             all_y_pred.append(y_pred)
             all_y_proba.append(y_proba)
-            
-            print(f"   📊 Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
+
+            print(f"   Exact Match: {fold_metrics['exact_match_accuracy']:.4f}, "
                   f"Macro F1: {fold_metrics['macro_f1']:.4f}, "
                   f"Macro AUC: {fold_metrics['macro_auc']:.4f}")
-            
+
         except Exception as e:
-            print(f"   ❌ Error in fold {fold_idx}: {e}")
+            print(f"   [ERROR] Error in fold {fold_idx}: {e}")
             continue
-    
+
     if not all_y_true:
         return None
-    
+
     # Aggregate all folds
     aggregate_y_true = np.vstack(all_y_true)
     aggregate_y_pred = np.vstack(all_y_pred)
     aggregate_y_proba = np.vstack(all_y_proba)
-    
+
     aggregate_metrics = compute_comprehensive_metrics(
         aggregate_y_true, aggregate_y_pred, aggregate_y_proba, mlb.classes_
     )
-    
-    print(f"\n🎯 Pfam2vec + MLP - Final Results:")
+
+    print(f"\nPfam2vec + MLP - Final Results:")
     print(f"   Exact Match Accuracy: {aggregate_metrics['exact_match_accuracy']:.4f}")
     print(f"   Macro F1: {aggregate_metrics['macro_f1']:.4f}")
     print(f"   Macro AUC: {aggregate_metrics['macro_auc']:.4f}")
@@ -791,7 +791,7 @@ def evaluate_pfam2vec_mlp(df, cv_splits, class_cols, seed=42):
 def evaluate_random_baseline(df, cv_splits, class_cols, seed=42):
     """Evaluate random 256-dimensional baseline with shallow MLP (mean-pooled)."""
     print(f"\n{'='*70}")
-    print(f"🔬 Evaluating: Random 256D Baseline")
+    print(f"Evaluating: Random 256D Baseline")
     print(f"{'='*70}")
     
     # Create random embeddings for each BGC
@@ -815,7 +815,7 @@ def evaluate_random_baseline(df, cv_splits, class_cols, seed=42):
 def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
     """Token-consistent random baseline: fixed random vector per Pfam domain, mean-pooled, strict linear probe."""
     print(f"\n{'='*70}")
-    print(f"🔬 Evaluating: Improved Random Baseline (Fixed per PFM Domain)")
+    print(f"Evaluating: Improved Random Baseline (Fixed per PFM Domain)")
     print(f"{'='*70}")
 
     # Load domain sequences for MIBiG 3.0 from preprocessed pickle
@@ -824,9 +824,9 @@ def evaluate_improved_random_baseline(df, cv_splits, class_cols, seed=42):
         df_mibig = pd.read_pickle(mibig_pkl)
         # Expect columns: bgc_id, domain_sequence (list of domain strings)
         domain_map = dict(zip(df_mibig['bgc_id'], df_mibig['domain_sequence']))
-        print(f"   📊 Loaded domain sequences for {len(domain_map)} BGCs")
+        print(f"   Loaded domain sequences for {len(domain_map)} BGCs")
     except Exception as e:
-        print(f"   ⚠️  Could not load MIBiG3 domain sequences: {e}")
+        print(f"   WARNING: Could not load MIBiG3 domain sequences: {e}")
         print("   Falling back to simple random baseline...")
         return evaluate_random_baseline(df, cv_splits, class_cols, seed)
 
@@ -908,20 +908,20 @@ def save_per_class_results(all_results, outdir):
         if not minor_df.empty:
             minor_summary = minor_df.groupby('Model')['AUC_ROC'].agg(['mean', 'std', 'count']).round(4)
             minor_summary.to_csv(f"{outdir}/minor_class_performance.csv")
-        
-        print(f"📊 Per-class analysis saved:")
+
+        print(f"Per-class analysis saved:")
         print(f"   - per_class_detailed.csv ({len(per_class_df)} entries)")
         print(f"   - per_class_summary.csv ({len(class_summary)} classes)")
         if not minor_df.empty:
             print(f"   - minor_class_performance.csv ({len(minor_classes)} minor classes)")
     else:
-        print("⚠️  No per-class data to save")
+        print("WARNING: No per-class data to save")
 
 # -------- Results Analysis -------------------------------------------------
 def create_comparison_table(all_results, outdir):
     """Create comparison table."""
     if not all_results:
-        print("❌ No results to compare")
+        print("[ERROR] No results to compare")
         return None
     
     main_metrics = ['macro_f1', 'macro_auc', 'weighted_auc', 'exact_match_accuracy']
@@ -936,21 +936,21 @@ def create_comparison_table(all_results, outdir):
             comparison_data.append(row)
     
     if not comparison_data:
-        print("❌ No valid comparison data")
+        print("[ERROR] No valid comparison data")
         return None
-    
+
     df_comparison = pd.DataFrame(comparison_data)
-    
+
     print(f"\n{'='*80}")
-    print("🏆 MODEL COMPARISON - MIBiG 3.0 RESULTS")
+    print("MODEL COMPARISON - MIBiG 3.0 RESULTS")
     print(f"{'='*80}")
-    
-    print("\n📊 Performance Summary:")
+
+    print("\nPerformance Summary:")
     display_df = df_comparison.copy()
     display_df.columns = ['Model', 'Macro F1', 'Macro AUC', 'Weighted AUC', 'Exact Accuracy']
     print(display_df.to_string(index=False, float_format='%.4f'))
-    
-    print(f"\n🥇 Best Performance:")
+
+    print(f"\nBest Performance:")
     for i, metric in enumerate(['Macro F1', 'Macro AUC', 'Weighted AUC', 'Exact Accuracy']):
         col_name = display_df.columns[i+1]
         best_idx = display_df[col_name].idxmax()
@@ -976,7 +976,7 @@ def main():
     args = parser.parse_args()
 
     # Set random seeds for reproducibility
-    print(f"🎲 Setting random seed to {args.seed} for reproducibility")
+    print(f"Setting random seed to {args.seed} for reproducibility")
     import random
     import torch
     
@@ -993,10 +993,10 @@ def main():
     import os
     os.environ['PYTHONHASHSEED'] = str(args.seed)
 
-    print("🚀 MIBiG 3.0 Multi-Label Classification with Stratified CV")
-    print(f"📁 Artifacts: {args.artifacts_dir}")
-    print(f"📁 Output: {args.outdir}")
-    print(f"🌱 Random seed: {args.seed}")
+    print("MIBiG 3.0 Multi-Label Classification with Stratified CV")
+    print(f"Artifacts: {args.artifacts_dir}")
+    print(f"Output: {args.outdir}")
+    print(f"Random seed: {args.seed}")
     
     # Load data
     data = load_mibig3_data(args.artifacts_dir)
@@ -1004,10 +1004,10 @@ def main():
     # Check if we have any data
     available_data = [k for k, v in data.items() if v is not None]
     if not available_data:
-        print("❌ No embedding data found!")
+        print("[ERROR] No embedding data found!")
         return
-    
-    print(f"📊 Available embeddings: {available_data}")
+
+    print(f"Available embeddings: {available_data}")
     
     # Check and extract missing embeddings if needed
     extract_missing_embeddings(args.artifacts_dir, args.seed)
@@ -1033,20 +1033,20 @@ def main():
         if embedding_type == "esm_bigcarp_concatenated":
             # Check if both ESM and BigCarp data are available
             if data["esm_embeddings"] is not None and data["random_init_last"] is not None:
-                print(f"\n{'🔬' * 3} EVALUATING {model_name.upper()} {'🔬' * 3}")
+                print(f"\nEVALUATING {model_name.upper()}")
             else:
-                print(f"⚠️  {embedding_type}: ESM or BigCarp data not available, skipping {model_name}")
+                print(f"WARNING: {embedding_type}: ESM or BigCarp data not available, skipping {model_name}")
                 continue
         elif data[embedding_type] is not None:
-            print(f"\n{'🔬' * 3} EVALUATING {model_name.upper()} {'🔬' * 3}")
+            print(f"\nEVALUATING {model_name.upper()}")
         else:
-            print(f"⚠️  {embedding_type} data not available, skipping {model_name}")
+            print(f"WARNING: {embedding_type} data not available, skipping {model_name}")
             continue
             
         # Prepare data (common for all cases)
         df_prep, emb_col = prepare_embedding_data(data, embedding_type)
         if df_prep is None:
-            print(f"❌ Failed to prepare {embedding_type} data")
+            print(f"[ERROR] Failed to prepare {embedding_type} data")
             continue
         
         # Convert to binary classes
@@ -1063,25 +1063,25 @@ def main():
             else:
                 emb_dim = len(sample_emb)
         else:
-            print(f"❌ Cannot determine embedding dimension for {embedding_type}")
+            print(f"[ERROR] Cannot determine embedding dimension for {embedding_type}")
             continue
-        
+
         print(f"   Embedding dimension: {emb_dim}")
-        
+
         # Evaluate model
         result = evaluate_mlp_model(
             df_prep, cv_splits, emb_col, emb_dim, model_name, class_cols, args.seed
         )
-        
+
         if result is not None:
             all_results.append(result)
-            print(f"✅ {model_name} completed successfully!")
+            print(f"[OK] {model_name} completed successfully!")
         else:
-            print(f"❌ {model_name} failed!")
+            print(f"[ERROR] {model_name} failed!")
     
     # Evaluate Pfam2vec models
     if data["pfam2vec"] is not None:
-        print(f"\n{'🔬' * 3} EVALUATING PFAM2VEC MODELS {'🔬' * 3}")
+        print(f"\nEVALUATING PFAM2VEC MODELS")
         
         df_prep, emb_col = prepare_embedding_data(data, "pfam2vec")
         if df_prep is not None:
@@ -1092,20 +1092,20 @@ def main():
             result = evaluate_pfam2vec_rf(df_prep, cv_splits, class_cols, args.seed)
             if result is not None:
                 all_results.append(result)
-                print(f"✅ Pfam2vec + Random Forest completed successfully!")
+                print(f"[OK] Pfam2vec + Random Forest completed successfully!")
             else:
-                print(f"❌ Pfam2vec + Random Forest failed!")
-            
+                print(f"[ERROR] Pfam2vec + Random Forest failed!")
+
             # Pfam2vec + MLP
             result = evaluate_pfam2vec_mlp(df_prep, cv_splits, class_cols, args.seed)
             if result is not None:
                 all_results.append(result)
-                print(f"✅ Pfam2vec + MLP completed successfully!")
+                print(f"[OK] Pfam2vec + MLP completed successfully!")
             else:
-                print(f"❌ Pfam2vec + MLP failed!")
-    
+                print(f"[ERROR] Pfam2vec + MLP failed!")
+
     # Evaluate Random Baselines
-    print(f"\n{'🔬' * 3} EVALUATING RANDOM BASELINES {'🔬' * 3}")
+    print(f"\nEVALUATING RANDOM BASELINES")
     
     # Use any available data for baseline (just need the labels)
     baseline_data = None
@@ -1123,33 +1123,33 @@ def main():
         result = evaluate_random_baseline(df_baseline, cv_splits, class_cols, args.seed)
         if result is not None:
             all_results.append(result)
-            print(f"✅ Random 256D Baseline completed successfully!")
+            print(f"[OK] Random 256D Baseline completed successfully!")
         else:
-            print(f"❌ Random 256D Baseline failed!")
+            print(f"[ERROR] Random 256D Baseline failed!")
 
         # Improved token-consistent baseline
         result = evaluate_improved_random_baseline(df_baseline, cv_splits, class_cols, args.seed)
         if result is not None:
             all_results.append(result)
-            print(f"✅ Improved Random Baseline completed successfully!")
+            print(f"[OK] Improved Random Baseline completed successfully!")
         else:
-            print(f"❌ Improved Random Baseline failed!")
-    
+            print(f"[ERROR] Improved Random Baseline failed!")
+
     # Create final comparison
     if all_results:
         create_comparison_table(all_results, args.outdir)
-        
+
         # Save complete results
         with open(f"{args.outdir}/complete_results.pkl", 'wb') as f:
             pickle.dump(all_results, f)
-        
+
         # Save per-class results as CSV for easy analysis
         save_per_class_results(all_results, args.outdir)
-        
-        print(f"\n✅ Evaluation completed!")
-        print(f"📋 Results saved to: {args.outdir}/")
+
+        print(f"\n[OK] Evaluation completed!")
+        print(f"Results saved to: {args.outdir}/")
     else:
-        print("❌ No successful evaluations!")
+        print("[ERROR] No successful evaluations!")
 
 if __name__ == "__main__":
     main()

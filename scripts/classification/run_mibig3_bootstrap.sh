@@ -11,13 +11,24 @@
 mkdir -p logs/mibig3_evaluation
 
 # Define working directory
-WORK_DIR="/home/u5bb/han00.u5bb/workspace/cgrep"
+WORK_DIR="/lus/lfs1aip2/scratch/u5bb/han00.u5bb/workspace/cgrep"
 
 # Change to the working directory
-cd $WORK_DIR
+cd $WORK_DIR || { echo "Error: Failed to change to $WORK_DIR"; exit 1; }
 
 # Initialize conda and activate environment
-source ~/miniforge3/etc/profile.d/conda.sh
+# Try multiple possible conda locations
+if [ -f /scratch/u5bb/han00.u5bb/miniforge3/etc/profile.d/conda.sh ]; then
+    source /scratch/u5bb/han00.u5bb/miniforge3/etc/profile.d/conda.sh
+elif [ -f ~/miniforge3/etc/profile.d/conda.sh ]; then
+    source ~/miniforge3/etc/profile.d/conda.sh
+elif [ -f ~/.conda/etc/profile.d/conda.sh ]; then
+    source ~/.conda/etc/profile.d/conda.sh
+else
+    echo "Error: Could not find conda.sh"
+    exit 1
+fi
+
 conda activate cgrep
 
 if [ $? -ne 0 ]; then
@@ -33,38 +44,38 @@ COMMAND="python scripts/classification/bootstrap_evaluation.py \
   --base_seed 42"
 
 # Log system information (minimal)
-echo "🚀 MIBiG 3.0 Bootstrap Evaluation Started"
+echo " MIBiG 3.0 Bootstrap Evaluation Started"
 echo "Job ID: $SLURM_JOB_ID | Node: $(hostname) | Start: $(date)"
 echo "Environment: $CONDA_DEFAULT_ENV | Python: $(which python)"
 echo ""
 
 # Run bootstrap evaluation
-echo "🔄 Running bootstrap evaluation with 10 random seeds..."
+echo " Running bootstrap evaluation with 10 random seeds..."
 echo "Progress will be shown below:"
 echo ""
 $COMMAND
 EVAL_EXIT_CODE=$?
 
 echo ""
-echo "📊 Bootstrap Evaluation Results:"
+echo " Bootstrap Evaluation Results:"
 if [ $EVAL_EXIT_CODE -eq 0 ]; then
-    echo "✅ Bootstrap evaluation completed successfully!"
+    echo " Bootstrap evaluation completed successfully!"
     
     # Show summary results
     if [ -f "results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv" ]; then
         echo ""
-        echo "📈 Performance Summary (Macro AUC Focus):"
+        echo " Performance Summary (Macro AUC Focus):"
         echo "Model,Macro_AUC_Mean,Macro_AUC_Std,95%_CI_Lower,95%_CI_Upper"
         tail -n +2 results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv | \
         sort -t',' -k2 -nr | \
         awk -F',' '{printf "%-35s %8.4f ± %6.4f [%7.4f, %7.4f]\n", $1, $2, $3, $4, $5}'
     fi
 else
-    echo "❌ Bootstrap evaluation failed with exit code: $EVAL_EXIT_CODE"
+    echo " Bootstrap evaluation failed with exit code: $EVAL_EXIT_CODE"
 fi
 
 echo ""
-echo "🏁 Job completed at: $(date)"
-echo "📁 Results: $WORK_DIR/results/mibig3_bootstrap_evaluation/"
+echo " Job completed at: $(date)"
+echo " Results: $WORK_DIR/results/mibig3_bootstrap_evaluation/"
 
 exit $EVAL_EXIT_CODE
