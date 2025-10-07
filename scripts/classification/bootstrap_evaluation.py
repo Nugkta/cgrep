@@ -1,31 +1,21 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
-Bootstrap Evaluation for MIBiG Classification Models
-====================================================
+Bootstrap Evaluation for MIBiG Classification Models.
 
-Bootstrap evaluation with multiple random seeds to assess performance stability and
-statistical significance. Calculates mean ± std and 95% confidence intervals.
+This script performs bootstrap evaluation of machine learning models for biosynthetic gene 
+cluster (BGC) classification using the MIBiG database. It runs multiple evaluations with 
+different random seeds to assess model performance variability and statistical significance.
 
-Usage:
-    $ python scripts/classification/bootstrap_evaluation.py --dataset mibig3 [--n_seeds N]
-    $ python scripts/classification/bootstrap_evaluation.py --dataset mibig3 --n_seeds 10 --focus_metric macro_auc
-    $ sbatch scripts/classification/run_mibig3_bootstrap.sh  # For SLURM cluster
+The bootstrap evaluation provides:
+- Mean performance metrics across multiple random seeds
+- Standard deviations to measure performance variability
+- 95% confidence intervals for statistical inference
+- Comprehensive results export in multiple formats
 
-Arguments:
-    --dataset: Dataset version (mibig1 or mibig3)
-    --n_seeds: Number of random seeds (default: 10)
-    --focus_metric: Primary metric for comparison (default: macro_auc)
-    --base_seed: Base seed for reproducibility (default: 42)
+Typical usage:
+    python bootstrap_evaluation.py --dataset mibig3 --n_seeds 10 --focus_metric macro_auc
 
-Outputs:
-    bootstrap_analysis/
-        - {dataset}_bootstrap_summary.csv: Summary with mean, std, 95% CI
-        - {dataset}_bootstrap_statistics.json: Detailed statistics
-        - {dataset}_bootstrap_raw_results.pkl: Raw results from all seeds
 
-Author: [Your Name]
-Date: 2025
 """
 
 import os
@@ -54,24 +44,35 @@ def run_single_evaluation(
     dataset_version: str
 ) -> Tuple[Optional[List[Dict]], Optional[str]]:
     """
-    Run a single evaluation with the specified random seed.
+    Execute a single model evaluation with a specific random seed.
+
+    This function runs the evaluation script for all models using a given random seed.
+    It handles subprocess execution, result loading, and error management for individual
+    evaluation runs within the bootstrap procedure.
 
     Args:
-        script_path: Path to evaluation script
-        artifacts_dir: Directory containing embedding artifacts
-        outdir: Output directory for results
-        seed: Random seed for this run
-        dataset_version: Dataset version identifier
+        script_path (str): Absolute path to the evaluation script to execute 
+            (e.g., 'mibig3_stratified_evaluation.py')
+        artifacts_dir (str): Directory path containing model artifacts and embeddings
+            required for evaluation
+        outdir (str): Base output directory where seed-specific results will be saved
+        seed (int): Random seed value for reproducible evaluation (1-9999)
+        dataset_version (str): Dataset identifier for naming and organization 
+            (e.g., 'MIBIG3')
 
     Returns:
-        Tuple of (results list, error message if failed)
+        Tuple[Optional[List[Dict]], Optional[str]]: A tuple containing:
+            - results (List[Dict] or None): List of model evaluation results if successful.
+              Each dict contains model_name, aggregate_metrics, and detailed performance data.
+            - error_message (str or None): Error description if evaluation failed, 
+              None if successful.
+
+    Raises:
+        subprocess.CalledProcessError: When the evaluation script fails execution.
+        FileNotFoundError: When the results pickle file cannot be found.
+        pickle.UnpicklingError: When the results file is corrupted or invalid.
     """
-    print(f"Running evaluation with seed {seed}...")
-
-    # Create seed-specific output directory
     seed_outdir = f"{outdir}/seed_{seed}"
-
-    # Build command
     cmd = [
         sys.executable, script_path,
         "--artifacts_dir", artifacts_dir,
@@ -80,11 +81,7 @@ def run_single_evaluation(
     ]
 
     try:
-        # Run evaluation
-        result = subprocess.run(cmd, check=True, text=True)
-        print(f"Seed {seed} completed successfully")
-
-        # Load results
+        subprocess.run(cmd, check=True, text=True)
         results_file = f"{seed_outdir}/complete_results.pkl"
         if os.path.exists(results_file):
             with open(results_file, 'rb') as f:
@@ -92,11 +89,8 @@ def run_single_evaluation(
             return results, None
         else:
             return None, f"Results file not found: {results_file}"
-
     except subprocess.CalledProcessError as e:
-        error_msg = f"Seed {seed} failed with exit code {e.returncode}"
-        print(f"{error_msg}")
-        return None, error_msg
+        return None, f"Seed {seed} failed with exit code {e.returncode}"
 
 
 # ==============================================================================
@@ -105,13 +99,33 @@ def run_single_evaluation(
 
 def extract_metrics(results: List[Dict]) -> List[Dict[str, Any]]:
     """
-    Extract key metrics from evaluation results.
+    Extract and standardize key performance metrics from evaluation results.
+
+    This function processes raw evaluation results and extracts standardized performance
+    metrics for statistical analysis. It handles missing metrics gracefully and ensures
+    consistent data structure across different model types.
 
     Args:
-        results: List of model evaluation results
+        results (List[Dict]): Raw evaluation results from model evaluation script.
+            Each dictionary should contain:
+            - 'model_name' (str): Name/identifier of the evaluated model
+            - 'aggregate_metrics' (Dict): Dictionary of computed performance metrics
+              including macro_f1, macro_auc, weighted_auc, exact_match_accuracy, etc.
 
     Returns:
-        List of metric dictionaries for each model
+        List[Dict[str, Any]]: Standardized metrics for each model. Each dictionary contains:
+            - 'model_name' (str): Model identifier
+            - 'macro_f1' (float): Macro-averaged F1 score (0.0-1.0)
+            - 'macro_auc' (float): Macro-averaged AUC-ROC score (0.0-1.0)  
+            - 'weighted_auc' (float): Sample-weighted AUC-ROC score (0.0-1.0)
+            - 'exact_match_accuracy' (float): Exact label match accuracy (0.0-1.0)
+            - 'micro_f1' (float): Micro-averaged F1 score (0.0-1.0)
+            - 'weighted_macro_f1' (float): Sample-weighted macro F1 score (0.0-1.0)
+            Missing metrics are filled with np.nan for statistical consistency.
+
+    Note:
+        This function filters out invalid results (None values or missing aggregate_metrics)
+        and only returns metrics for successfully evaluated models.
     """
     metrics_data = []
 
@@ -146,47 +160,59 @@ def bootstrap_evaluation(
     base_seed: int = 42
 ) -> Optional[Tuple[List[Dict], List[int], List[int]]]:
     """
-    Run bootstrap evaluation with multiple random seeds.
+    Perform bootstrap evaluation across multiple random seeds for statistical robustness.
+
+    This is the core function that orchestrates the bootstrap evaluation process. It generates
+    multiple random seeds and runs the evaluation script with each seed to assess model 
+    performance variability and statistical significance. The function tracks successful
+    and failed runs for quality assessment.
 
     Args:
-        script_path: Path to evaluation script
-        artifacts_dir: Directory containing embedding artifacts
-        outdir: Output directory for results
-        dataset_version: Dataset version identifier
-        n_seeds: Number of random seeds to evaluate
-        base_seed: Base seed for generating random seeds
+        script_path (str): Absolute path to the evaluation script (e.g., 'mibig3_stratified_evaluation.py').
+            The script must accept --artifacts_dir, --outdir, and --seed arguments.
+        artifacts_dir (str): Directory containing model artifacts, embeddings, and data files
+            required for evaluation. Should contain subdirectories for each model type.
+        outdir (str): Base output directory where all bootstrap results will be saved.
+            Individual seed results will be saved in subdirectories named 'seed_{N}'.
+        dataset_version (str): Dataset version identifier for result organization and naming
+            (e.g., 'MIBIG1', 'MIBIG3').
+        n_seeds (int, optional): Number of random seeds to evaluate. More seeds provide
+            better statistical estimates but increase computation time. Default: 10.
+            Recommended: 10-30 for research, 5 for testing.
+        base_seed (int, optional): Master seed for reproducible random seed generation.
+            Same base_seed will always generate the same sequence of evaluation seeds.
+            Default: 42.
 
     Returns:
-        Tuple of (all_results, successful_seeds, failed_seeds) or None if too few successful
-    """
-    print(f"\nBootstrap Evaluation - {dataset_version}")
-    print(f"Running {n_seeds} evaluations with different random seeds")
-    print(f"Script: {script_path}")
-    print(f"Artifacts: {artifacts_dir}")
-    print(f"Output: {outdir}")
+        Optional[Tuple[List[Dict], List[int], List[int]]]: Returns None if insufficient
+        successful runs (< 3), otherwise returns tuple containing:
+            - all_results (List[Dict]): Complete evaluation results for all successful runs.
+              Each dict contains 'seed' (int) and 'metrics' (List[Dict]) with model performance.
+            - successful_seeds (List[int]): List of seeds that completed successfully.
+            - failed_seeds (List[int]): List of seeds that failed evaluation.
 
+    Raises:
+        ValueError: When n_seeds < 1 or base_seed is invalid.
+        FileNotFoundError: When script_path doesn't exist.
+
+    Note:
+        - Requires at least 3 successful runs for meaningful statistical analysis
+        - Failed seeds are tracked but don't stop the overall evaluation
+        - Progress is reported for each evaluation run
+        - Results are immediately processed to extract metrics
+    """
     # Generate random seeds
     np.random.seed(base_seed)
     seeds = np.random.randint(1, 10000, n_seeds)
-    print(f"Using seeds: {seeds}")
 
-    # Storage for results
     all_results = []
     successful_seeds = []
     failed_seeds = []
 
     # Run evaluations
     for i, seed in enumerate(seeds):
-        print(f"\n{'='*60}")
-        print(f"Evaluation {i+1}/{n_seeds} - Seed {seed}")
-        print(f"{'='*60}")
-
-        # Progress bar
-        progress = int((i / n_seeds) * 40)
-        bar = '█' * progress + '░' * (40 - progress)
-        print(f"Progress: [{bar}] {i}/{n_seeds} ({i/n_seeds*100:.1f}%)")
-        print()
-
+        print(f"Running evaluation {i+1}/{n_seeds} with seed {seed}")
+        
         results, error = run_single_evaluation(
             script_path, artifacts_dir, outdir, seed, dataset_version
         )
@@ -200,24 +226,9 @@ def bootstrap_evaluation(
                 })
                 successful_seeds.append(seed)
             else:
-                print(f"Warning: No valid metrics extracted for seed {seed}")
                 failed_seeds.append(seed)
         else:
-            print(f"Failed to get results for seed {seed}: {error}")
             failed_seeds.append(seed)
-
-    # Final progress bar
-    final_bar = '█' * 40
-    print(f"\nFinal Progress: [{final_bar}] {n_seeds}/{n_seeds} (100.0%)")
-
-    # Summary
-    print(f"\n{'='*60}")
-    print(f"Bootstrap Evaluation Summary")
-    print(f"{'='*60}")
-    print(f"Successful runs: {len(successful_seeds)}/{n_seeds}")
-    print(f"Failed runs: {len(failed_seeds)}")
-    if failed_seeds:
-        print(f"   Failed seeds: {failed_seeds}")
 
     if len(successful_seeds) < 3:
         print("Too few successful runs for statistical analysis!")
@@ -232,13 +243,46 @@ def bootstrap_evaluation(
 
 def calculate_bootstrap_statistics(all_results: List[Dict]) -> Dict[str, Dict[str, Any]]:
     """
-    Calculate mean, std, and 95% confidence intervals for each model and metric.
+    Calculate comprehensive bootstrap statistics for model performance analysis.
+
+    This function computes mean, standard deviation, and 95% confidence intervals for each
+    model and metric across all bootstrap runs. It provides the statistical foundation for
+    comparing model performance and assessing significance of differences.
 
     Args:
-        all_results: List of all evaluation results across seeds
+        all_results (List[Dict]): Complete bootstrap evaluation results from all successful runs.
+            Each dictionary contains:
+            - 'seed' (int): Random seed used for this evaluation
+            - 'metrics' (List[Dict]): Performance metrics for each model in this run
+              Each metrics dict contains model_name and performance values
 
     Returns:
-        Dictionary mapping model names to their statistics
+        Dict[str, Dict[str, Any]]: Comprehensive statistics for each model. Structure:
+        {
+            'model_name': {
+                'model_name' (str): Model identifier
+                'n_runs' (int): Number of successful evaluation runs
+                
+                For each metric (macro_f1, macro_auc, weighted_auc, exact_match_accuracy, 
+                micro_f1, weighted_macro_f1):
+                '{metric}_mean' (float): Mean performance across runs
+                '{metric}_std' (float): Standard deviation (sample std with ddof=1)
+                '{metric}_ci_lower' (float): Lower bound of 95% confidence interval
+                '{metric}_ci_upper' (float): Upper bound of 95% confidence interval  
+                '{metric}_values' (List[float]): Raw values from all runs
+            }
+        }
+
+    Statistical Details:
+        - Uses Student's t-distribution for confidence intervals when n > 2
+        - Sample standard deviation (ddof=1) for unbiased estimation
+        - Handles missing values (NaN) gracefully in calculations
+        - Single-run case: std=0, CI bounds equal to mean value
+
+    Note:
+        - Models with fewer runs may have wider confidence intervals
+        - NaN values in metrics are excluded from statistical calculations
+        - Results are suitable for publication and statistical comparison
     """
     # Organize results by model
     model_results = {}
@@ -316,35 +360,44 @@ def create_bootstrap_summary_table(
     focus_metric: str = 'macro_auc'
 ) -> pd.DataFrame:
     """
-    Create summary table focused on primary metric with confidence intervals.
+    Create a publication-ready summary table of bootstrap evaluation results.
+
+    This function generates a pandas DataFrame summarizing model performance statistics
+    with focus on a primary metric. The table is sorted by performance and includes
+    confidence intervals for statistical comparison between models.
 
     Args:
-        statistics: Dictionary of model statistics
-        focus_metric: Primary metric to focus on
+        statistics (Dict[str, Dict]): Bootstrap statistics from calculate_bootstrap_statistics().
+            Contains comprehensive performance statistics for each model including means,
+            standard deviations, and confidence intervals for all metrics.
+        focus_metric (str, optional): Primary metric for table sorting and emphasis.
+            Must be one of: 'macro_auc', 'macro_f1', 'weighted_auc', 'exact_match_accuracy',
+            'micro_f1', 'weighted_macro_f1'. Default: 'macro_auc'.
 
     Returns:
-        Summary DataFrame
-    """
-    print(f"\n{'='*100}")
-    print(f"BOOTSTRAP EVALUATION RESULTS - {focus_metric.upper()} FOCUS")
-    print(f"{'='*100}")
+        pd.DataFrame: Summary table with columns:
+            - 'Model' (str): Model name/identifier
+            - 'N_Runs' (int): Number of successful bootstrap runs
+            - '{Focus_Metric} Mean' (float): Mean performance for the focus metric
+            - '{Focus_Metric} Std' (float): Standard deviation for the focus metric
+            - '95% CI Lower' (float): Lower confidence interval bound
+            - '95% CI Upper' (float): Upper confidence interval bound
+            
+            Rows are sorted by focus metric mean in descending order (best first).
 
-    # Prepare data for table
+    Usage Notes:
+        - Non-overlapping confidence intervals indicate statistically significant differences
+        - Models with higher standard deviations show more performance variability
+        - Table is suitable for inclusion in research papers and reports
+        - Focus metric selection should match research objectives
+    """
     table_data = []
     for model_name, stats_dict in statistics.items():
         n_runs = stats_dict['n_runs']
-
-        # Primary metric
         mean_val = stats_dict.get(f'{focus_metric}_mean', np.nan)
         std_val = stats_dict.get(f'{focus_metric}_std', np.nan)
         ci_lower = stats_dict.get(f'{focus_metric}_ci_lower', np.nan)
         ci_upper = stats_dict.get(f'{focus_metric}_ci_upper', np.nan)
-
-        # Additional metrics for context
-        macro_f1_mean = stats_dict.get('macro_f1_mean', np.nan)
-        macro_f1_std = stats_dict.get('macro_f1_std', np.nan)
-        exact_acc_mean = stats_dict.get('exact_match_accuracy_mean', np.nan)
-        exact_acc_std = stats_dict.get('exact_match_accuracy_std', np.nan)
 
         table_data.append({
             'Model': model_name,
@@ -352,11 +405,7 @@ def create_bootstrap_summary_table(
             f'{focus_metric.replace("_", " ").title()} Mean': mean_val,
             f'{focus_metric.replace("_", " ").title()} Std': std_val,
             '95% CI Lower': ci_lower,
-            '95% CI Upper': ci_upper,
-            'Macro F1 Mean': macro_f1_mean,
-            'Macro F1 Std': macro_f1_std,
-            'Exact Acc Mean': exact_acc_mean,
-            'Exact Acc Std': exact_acc_std
+            '95% CI Upper': ci_upper
         })
 
     # Sort by primary metric mean (descending)
@@ -366,28 +415,7 @@ def create_bootstrap_summary_table(
         reverse=True
     )
 
-    # Create DataFrame
     df = pd.DataFrame(table_data)
-
-    # Display table
-    print("\nPerformance Summary:")
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.width', None)
-    pd.set_option('display.max_colwidth', 30)
-
-    # Format numbers for display
-    numeric_cols = [col for col in df.columns if col not in ['Model', 'N_Runs']]
-    for col in numeric_cols:
-        df[col] = df[col].apply(lambda x: f'{x:.4f}' if not np.isnan(x) else 'N/A')
-
-    print(df.to_string(index=False))
-
-    # Highlight best performing model
-    if not df.empty:
-        best_model = df.iloc[0]['Model']
-        best_score = df.iloc[0][metric_col]
-        print(f"\nBest Model (by {focus_metric.replace('_', ' ').title()}): {best_model} ({best_score})")
-
     return df
 
 
@@ -402,22 +430,56 @@ def save_bootstrap_results(
     dataset_version: str
 ) -> None:
     """
-    Save detailed bootstrap results to files.
+    Save comprehensive bootstrap evaluation results to multiple file formats.
+
+    This function exports bootstrap evaluation results in multiple formats for different
+    use cases: JSON for detailed analysis, pickle for programmatic access, and CSV for
+    spreadsheet applications and publication tables.
 
     Args:
-        statistics: Dictionary of model statistics
-        all_results: List of all evaluation results
-        outdir: Output directory
-        dataset_version: Dataset version identifier
+        statistics (Dict[str, Dict]): Computed bootstrap statistics from 
+            calculate_bootstrap_statistics(). Contains means, standard deviations,
+            confidence intervals, and raw values for each model and metric.
+        all_results (List[Dict]): Raw bootstrap evaluation results from all successful runs.
+            Contains complete evaluation data including individual seed results and
+            detailed model performance metrics.
+        outdir (str): Base output directory where results will be saved. A subdirectory
+            'bootstrap_analysis' will be created containing all output files.
+        dataset_version (str): Dataset identifier used for file naming (e.g., 'MIBIG3').
+            Files will be prefixed with lowercase version (e.g., 'mibig3_bootstrap_*').
+
+    Output Files:
+        1. '{dataset}_bootstrap_statistics.json': Detailed statistics in JSON format
+           - Human-readable structure with all computed statistics
+           - Includes raw values for custom analysis
+           - Suitable for programmatic processing
+           
+        2. '{dataset}_bootstrap_raw_results.pkl': Complete raw results in pickle format
+           - Contains all evaluation data from successful runs
+           - Preserves exact data structures for reproduction
+           - Fastest loading for Python applications
+           
+        3. '{dataset}_bootstrap_summary.csv': Summary table in CSV format
+           - Mean, std, and confidence intervals for key metrics
+           - Ready for spreadsheet import and publication
+           - Columns: model_name, {metric}_mean, {metric}_std, {metric}_ci_lower, {metric}_ci_upper
+
+    Note:
+        - Creates output directory if it doesn't exist
+        - Handles numpy data type conversion for JSON serialization
+        - CSV includes only core metrics: macro_f1, macro_auc, weighted_auc, exact_match_accuracy
+        - Files are suitable for version control and sharing
+
+    Raises:
+        OSError: When output directory cannot be created or files cannot be written
+        ValueError: When statistics or results contain invalid data structures
     """
-    # Create output directory
     bootstrap_outdir = f"{outdir}/bootstrap_analysis"
     Path(bootstrap_outdir).mkdir(parents=True, exist_ok=True)
 
     # Save detailed statistics as JSON
     stats_file = f"{bootstrap_outdir}/{dataset_version.lower()}_bootstrap_statistics.json"
     with open(stats_file, 'w') as f:
-        # Convert numpy types to JSON serializable
         json_stats = {}
         for model, stats_dict in statistics.items():
             json_stats[model] = {}
@@ -428,17 +490,12 @@ def save_bootstrap_results(
                     json_stats[model][key] = value.tolist()
                 else:
                     json_stats[model][key] = value
-
         json.dump(json_stats, f, indent=2)
-
-    print(f"Detailed statistics saved to: {stats_file}")
 
     # Save raw results
     raw_file = f"{bootstrap_outdir}/{dataset_version.lower()}_bootstrap_raw_results.pkl"
     with open(raw_file, 'wb') as f:
         pickle.dump(all_results, f)
-
-    print(f"Raw results saved to: {raw_file}")
 
     # Save summary CSV
     summary_data = []
@@ -455,15 +512,59 @@ def save_bootstrap_results(
     summary_file = f"{bootstrap_outdir}/{dataset_version.lower()}_bootstrap_summary.csv"
     summary_df.to_csv(summary_file, index=False)
 
-    print(f"Summary CSV saved to: {summary_file}")
-
 
 # ==============================================================================
 # Main Pipeline
 # ==============================================================================
 
 def main():
-    """Main bootstrap evaluation pipeline."""
+    """
+    Main bootstrap evaluation pipeline with command-line interface.
+
+    This function provides a comprehensive command-line interface for bootstrap evaluation
+    of MIBiG classification models. It handles argument parsing, path detection, execution
+    coordination, and results presentation.
+
+    The pipeline performs the following steps:
+    1. Parse and validate command-line arguments
+    2. Auto-detect file paths if not provided
+    3. Execute bootstrap evaluation across multiple seeds
+    4. Calculate comprehensive statistics with confidence intervals
+    5. Generate publication-ready summary tables
+    6. Export results in multiple formats (JSON, pickle, CSV)
+    7. Display formatted results summary
+
+    Command-line Arguments:
+        --dataset: Dataset version ('mibig1' or 'mibig3') [REQUIRED]
+        --artifacts_dir: Directory with model artifacts [auto-detected if not provided]
+        --outdir: Output directory [auto-generated if not provided]  
+        --n_seeds: Number of random seeds (default: 10)
+        --base_seed: Master seed for reproducibility (default: 42)
+        --focus_metric: Primary metric for analysis (default: 'macro_auc')
+
+    Auto-Detection Logic:
+        - artifacts_dir: "artifacts/classification/{dataset}" 
+        - outdir: "results/{dataset}_bootstrap_evaluation"
+        - script_path: "{dataset}_stratified_evaluation.py" in same directory
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+            - 0: Bootstrap evaluation completed successfully
+            - 1: Evaluation script not found, insufficient successful runs, or other errors
+
+    Output Display:
+        - Progress updates during evaluation
+        - Success/failure summary
+        - Performance summary table with focus metric
+        - File locations for saved results
+
+    Statistical Output:
+        The function displays a formatted table showing:
+        - Model names sorted by performance
+        - Mean ± standard deviation for focus metric
+        - 95% confidence intervals for statistical comparison
+        - File paths for detailed results
+    """
     parser = argparse.ArgumentParser(
         description="Bootstrap Evaluation for MIBiG Classification",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -499,11 +600,6 @@ def main():
         print(f"Evaluation script not found: {script_path}")
         return 1
 
-    print(f"Bootstrap Evaluation for {args.dataset.upper()}")
-    print(f"Focus metric: {args.focus_metric}")
-    print(f"Number of seeds: {args.n_seeds}")
-    print(f"Base seed: {args.base_seed}")
-
     # Run bootstrap evaluation
     results = bootstrap_evaluation(
         script_path, args.artifacts_dir, args.outdir,
@@ -515,27 +611,26 @@ def main():
 
     all_results, successful_seeds, failed_seeds = results
 
-    # Calculate statistics
-    print(f"\nCalculating bootstrap statistics...")
+    # Calculate statistics and save results
     statistics = calculate_bootstrap_statistics(all_results)
-
-    # Create summary table
     summary_df = create_bootstrap_summary_table(statistics, args.focus_metric)
-
-    # Save results
     save_bootstrap_results(statistics, all_results, args.outdir, args.dataset.upper())
 
-    print(f"\nBootstrap evaluation completed!")
+    # Display final summary
+    print(f"\nBootstrap evaluation completed: {len(successful_seeds)}/{args.n_seeds} successful runs")
     print(f"Results saved in: {args.outdir}/bootstrap_analysis/")
-
-    # Print final summary
-    print(f"\n{'='*60}")
-    print("FINAL SUMMARY")
-    print(f"{'='*60}")
-    print(f"Successful evaluations: {len(successful_seeds)}/{args.n_seeds}")
-    print(f"Primary metric ({args.focus_metric}): Focus on mean ± std and 95% CI")
-    print(f"Most robust comparison: Look for non-overlapping confidence intervals")
-    print("Models with small std and tight CI are more reliable")
+    print(f"Summary CSV: {args.outdir}/bootstrap_analysis/{args.dataset.lower()}_bootstrap_summary.csv")
+    
+    # Show performance summary table
+    print(f"\nPerformance Summary ({args.focus_metric.replace('_', ' ').title()}):")
+    print("=" * 80)
+    for _, row in summary_df.iterrows():
+        model = row['Model']
+        mean_val = row[f'{args.focus_metric.replace("_", " ").title()} Mean']
+        std_val = row[f'{args.focus_metric.replace("_", " ").title()} Std']
+        ci_lower = row['95% CI Lower']
+        ci_upper = row['95% CI Upper']
+        print(f"{model:<35} {mean_val:8.4f} ± {std_val:6.4f} [{ci_lower:7.4f}, {ci_upper:7.4f}]")
 
     return 0
 
