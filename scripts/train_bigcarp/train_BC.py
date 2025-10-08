@@ -39,7 +39,6 @@ Usage Examples:
         --epochs 100 \\
         --batch_size 256
 
-
 Output Files:
     - checkpoint_best.tar: Best validation performance model
     - checkpoint_latest.tar: Most recent training state for resumption  
@@ -62,10 +61,6 @@ Dependencies:
     - PyTorch with CUDA support
     - sequence_models package for ByteNet implementation
     - Standard scientific Python stack (numpy, pandas, matplotlib)
-
-Author: [Author information]
-Version: 1.0
-Date: 2024
 """
 
 import argparse
