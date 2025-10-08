@@ -39,29 +39,6 @@ Usage Examples:
         --epochs 100 \\
         --batch_size 256
 
-    # Training with pre-trained ESM embeddings (fine-tuning)
-    python scripts/train_bigcarp/train_BC.py \\
-        --fcorpus data/processed/bgc_corpus/antidb_pfam_corpus.csv \\
-        --fvocab data/processed/vocabularies/pfam_vocab_present.json \\
-        --esm_emb_fpath artifacts/bigcarp/esm_embeddings/esm1b_pfam_embs.pt \\
-        --pretrain \\
-        --epochs 200 \\
-        --batch_size 512
-
-    # Training with frozen ESM embeddings
-    python scripts/train_bigcarp/train_BC.py \\
-        --fcorpus data/processed/bgc_corpus/antidb_pfam_corpus.csv \\
-        --fvocab data/processed/vocabularies/pfam_vocab_present.json \\
-        --esm_emb_fpath artifacts/bigcarp/esm_embeddings/esm1b_pfam_embs.pt \\
-        --freeze \\
-        --epochs 150
-
-    # Resume training from checkpoint
-    python scripts/train_bigcarp/train_BC.py \\
-        --fcorpus data/processed/bgc_corpus/antidb_pfam_corpus.csv \\
-        --fvocab data/processed/vocabularies/pfam_vocab_present.json \\
-        --out_fpath artifacts/bigcarp/models/run_20241007_143022 \\
-        --restart
 
 Output Files:
     - checkpoint_best.tar: Best validation performance model

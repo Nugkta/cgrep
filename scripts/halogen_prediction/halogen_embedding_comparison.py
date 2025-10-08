@@ -5,6 +5,14 @@ This script evaluates protein embeddings for binary classification of halogen pr
 using AUC-ROC as the primary performance metric. Six embedding configurations are compared
 using MLP classifiers with rigorous statistical validation.
 
+Dataset:
+    The input dataset (halogen_pf04820_final_dataset.pkl) contains biosynthetic gene clusters
+    (BGCs) that possess the halogenase Pfam domain (PF04820). These BGCs may or may not produce
+    halogenated final products. The dataset includes:
+        - BGC sequences with halogenase domains
+        - Binary labels indicating halogen presence in final products
+        - Multiple embedding types (ESM-2, BigCarp domain, BigCarp mean-pooled)
+
 Methodology:
     - Leave-One-Out Cross-Validation (LOOCV) for unbiased AUC-ROC estimation
     - Bootstrap resampling (10,000 samples) for AUC-ROC confidence intervals
@@ -63,15 +71,19 @@ def load_final_dataset(path: str) -> pd.DataFrame:
     Loads a pickled pandas DataFrame containing protein embeddings and halogen labels,
     then validates the presence of required columns.
 
+    Dataset Description (data/processed/halogen_prediction/halogen_pf04820_final_dataset.pkl):
+        This is a curated dataset containing biosynthetic gene clusters (BGCs) that possess the halogenase Pfam domain (PF04820) but may or may not produce halogenated final products. The dataset includes various sequence embeddings for prediction tasks.
+
     Args:
         path: Path to the pickled DataFrame file (.pkl format)
 
     Returns:
         DataFrame with the following required columns:
-            - esm_domain_embedding: ESM-2 domain embeddings (numpy arrays)
-            - bigcarp_domain_embedding: BigCarp domain embeddings (numpy arrays)
-            - bigcarp_embedding_mean_pool: Mean-pooled BigCarp embeddings (numpy arrays)
-            - has_halogen: Binary labels (0/1 or bool) indicating halogen presence
+            - esm_domain_embedding: ESM-2 protein language model domain embeddings (numpy arrays)
+            - bigcarp_domain_embedding: BigCarp domain-level embeddings of BGC sequences (numpy arrays)
+            - bigcarp_embedding_mean_pool: Mean-pooled BigCarp embeddings across BGC sequences (numpy arrays)
+            - has_halogen: Binary labels (0/1 or bool) indicating whether the BGC produces
+                          a halogenated final product (True/1) or not (False/0)
 
     Raises:
         FileNotFoundError: If the dataset file does not exist at the specified path
@@ -96,12 +108,14 @@ def stack_col(df: pd.DataFrame, col: str) -> np.ndarray:
     """
     Convert a DataFrame column containing arrays into a stacked 2D numpy array.
 
-    Takes a DataFrame column where each cell contains an array-like object (list, numpy array)
-    and stacks them into a single 2D array suitable for machine learning models.
+    Takes a DataFrame column where each cell contains an array-like object (list, numpy array) and stacks them into a single 2D array suitable for machine learning models.
+
+    Usage:
+        Transforms embedding columns from the DataFrame into feature matrices for ML models.
 
     Args:
         df: DataFrame containing the column to stack
-        col: Name of the column containing array-like objects
+        col: Name of the column containing array-like objects (embeddings)
 
     Returns:
         2D numpy array of shape (n_samples, n_features) where each row corresponds
@@ -118,9 +132,9 @@ def stack_col(df: pd.DataFrame, col: str) -> np.ndarray:
         return np.array(list(vals), dtype=float)
 
 
-def get_deep_mlp_config(input_dim: int) -> Dict:
+def get_mlp_config(input_dim: int) -> Dict:
     """
-    Get configuration parameters for the deep MLP classifier.
+    Get configuration parameters for the MLP classifier.
 
     Returns a dictionary of hyperparameters optimized for the halogen prediction task
     using a two-layer neural network architecture.
@@ -148,7 +162,7 @@ def get_deep_mlp_config(input_dim: int) -> Dict:
     }
 
 
-def loocv_eval_deep(X: np.ndarray, y: np.ndarray, random_state: int = 42) -> Dict:
+def loocv_eval(X: np.ndarray, y: np.ndarray, random_state: int = 42) -> Dict:
     """
     Perform Leave-One-Out Cross-Validation (LOOCV) to estimate AUC-ROC.
 
@@ -170,14 +184,13 @@ def loocv_eval_deep(X: np.ndarray, y: np.ndarray, random_state: int = 42) -> Dic
     Note:
         - Each fold uses independent StandardScaler fitted on training data only
         - If MLP training fails, falls back to random predictions (rare edge case)
-        - Progress bar shows LOOCV iteration progress
     """
     loo = LeaveOneOut()
     preds: List[int] = []
     probs: List[float] = []
     trues: List[int] = []
 
-    mlp_config = get_deep_mlp_config(X.shape[1])
+    mlp_config = get_mlp_config(X.shape[1])
 
     for train_idx, test_idx in tqdm(loo.split(y), total=len(y), desc="LOOCV", leave=False):
         X_tr, X_te = X[train_idx], X[test_idx]
@@ -196,6 +209,7 @@ def loocv_eval_deep(X: np.ndarray, y: np.ndarray, random_state: int = 42) -> Dic
         except Exception:
             pred = int(np.random.choice([0, 1]))
             prob = float(np.random.random())
+            print("[WARNING:] MLP training failed, using random prediction.")
 
         preds.append(pred)
         probs.append(prob)
@@ -276,8 +290,8 @@ def bootstrap_auc_roc(y_true: np.ndarray, y_proba: np.ndarray,
     return mean_auc, ci_lower, ci_upper
 
 
-def evaluate_with_bootstrap_deep(X: np.ndarray, y: np.ndarray,
-                                n_bootstrap: int = 10000, name: str = "") -> Dict:
+def evaluate_with_bootstrap(X: np.ndarray, y: np.ndarray,
+                           n_bootstrap: int = 10000, name: str = "") -> Dict:
     """
     Complete evaluation pipeline: LOOCV AUC-ROC + bootstrap confidence intervals.
 
@@ -308,11 +322,11 @@ def evaluate_with_bootstrap_deep(X: np.ndarray, y: np.ndarray,
     print(f"Evaluating {name}...")
     print(f"Feature dimensions: {X.shape}")
 
-    mlp_config = get_deep_mlp_config(X.shape[1])
+    mlp_config = get_mlp_config(X.shape[1])
     print(f"Using MLP architecture: {mlp_config['hidden_layer_sizes']}")
 
     print("Running LOOCV evaluation...")
-    results = loocv_eval_deep(X, y, random_state=42)
+    results = loocv_eval(X, y, random_state=42)
 
     print("Performing bootstrap analysis...")
     mean_boot_auc, ci_lower, ci_upper = bootstrap_auc_roc(
@@ -427,10 +441,10 @@ def paired_bootstrap_test(y_true: np.ndarray, y_proba1: np.ndarray, y_proba2: np
 
 def create_visualization(results_df: pd.DataFrame, paired_results: Dict, output_dir: str = "results/halogen_prediction"):
     """
-    Generate comprehensive 4-panel visualization of embedding comparison results.
+    Generate 2-panel visualization of embedding comparison results.
 
-    Creates a publication-quality figure with multiple subplots showing performance metrics,
-    confidence intervals, feature dimensions, and statistical comparisons between models.
+    Creates a publication-quality figure showing AUC-ROC performance comparison
+    and statistical testing between models.
 
     Args:
         results_df: DataFrame containing evaluation results with columns:
@@ -438,31 +452,24 @@ def create_visualization(results_df: pd.DataFrame, paired_results: Dict, output_
             - bootstrap_mean_auc: Mean AUC from bootstrap
             - bootstrap_ci_lower: Lower 95% CI bound
             - bootstrap_ci_upper: Upper 95% CI bound
-            - accuracy, precision, recall, f1, auc_roc: Performance metrics
-            - n_features: Number of features in embedding
-            - mlp_architecture: MLP architecture string
         paired_results: Dictionary from paired_bootstrap_test() containing:
             - original_diff, bootstrap_mean_diff, etc.
             - bootstrap_diffs: Array of bootstrap differences
         output_dir: Directory to save the visualization (default: "results/halogen_prediction")
 
     Output:
-        Saves a PNG file "deep_mlp_embedding_comparison.png" containing:
-            - Panel 1 (top left, 2 cols): Horizontal bar chart with AUC + 95% CI error bars
-            - Panel 2 (top right): Heatmap of all metrics across embeddings
-            - Panel 3 (bottom left): Bar chart of feature dimensions
-            - Panel 4 (bottom center+right): Histogram of paired bootstrap differences
+        Saves a PNG file "mlp_embedding_comparison.png" containing:
+            - Panel 1 (left): Horizontal bar chart with AUC + 95% CI error bars
+            - Panel 2 (right): Histogram of paired bootstrap differences
 
     Note:
         - Color coding: ESM+ (red), ESM (blue), BigCarp only (green)
         - Figure saved at 300 DPI for publication quality
         - Also calls plt.show() to display interactively
     """
-    fig = plt.figure(figsize=(20, 12))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-    # Plot 1: Performance comparison bar plot (top left)
-    ax1 = plt.subplot(2, 3, (1, 2))
-
+    # Plot 1: Performance comparison bar plot
     embedding_names = results_df['embedding_name']
     aucs = results_df['bootstrap_mean_auc']
     ci_lowers = results_df['bootstrap_ci_lower']
@@ -485,7 +492,7 @@ def create_visualization(results_df: pd.DataFrame, paired_results: Dict, output_
     ax1.set_yticks(range(len(embedding_names)))
     ax1.set_yticklabels(embedding_names, fontsize=10)
     ax1.set_xlabel('Bootstrap Mean AUC-ROC', fontsize=12)
-    ax1.set_title('Deep MLP Embedding Performance Comparison\nBootstrap AUC-ROC with 95% Confidence Intervals', fontsize=14)
+    ax1.set_title('MLP Embedding Performance Comparison\nBootstrap AUC-ROC with 95% Confidence Intervals', fontsize=14)
     ax1.grid(axis='x', alpha=0.3)
     ax1.set_xlim(0, 1)
 
@@ -494,60 +501,23 @@ def create_visualization(results_df: pd.DataFrame, paired_results: Dict, output_
                  f'{auc:.3f}\n[{ci_lower:.3f}, {ci_upper:.3f}]',
                  va='center', fontsize=9)
 
-    # Plot 2: All metrics comparison (top right)
-    ax2 = plt.subplot(2, 3, 3)
-
-    metrics = ['accuracy', 'precision', 'recall', 'f1', 'auc_roc']
-    metric_data = results_df[metrics].values
-
-    im = ax2.imshow(metric_data, cmap='RdYlBu_r', aspect='auto', vmin=0, vmax=1)
-    ax2.set_xticks(range(len(metrics)))
-    ax2.set_xticklabels([m.capitalize() for m in metrics], rotation=45)
-    ax2.set_yticks(range(len(embedding_names)))
-    ax2.set_yticklabels(embedding_names, fontsize=9)
-    ax2.set_title('All Metrics Heatmap', fontsize=12)
-
-    for i in range(len(embedding_names)):
-        for j in range(len(metrics)):
-            ax2.text(j, i, f'{metric_data[i, j]:.3f}',
-                    ha="center", va="center", color="black", fontsize=8)
-
-    plt.colorbar(im, ax=ax2, shrink=0.6)
-
-    # Plot 3: Feature dimensions bar chart (bottom left)
-    ax3 = plt.subplot(2, 3, 4)
-
-    n_features = results_df['n_features']
-    bars3 = ax3.bar(range(len(embedding_names)), n_features, alpha=0.7, color=colors)
-    ax3.set_xticks(range(len(embedding_names)))
-    ax3.set_xticklabels(embedding_names, rotation=45, ha='right', fontsize=9)
-    ax3.set_ylabel('Number of Features')
-    ax3.set_title('Feature Dimensions by Embedding Type')
-    ax3.grid(axis='y', alpha=0.3)
-
-    for bar, n_feat in zip(bars3, n_features):
-        ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 5,
-                 str(n_feat), ha='center', va='bottom', fontsize=9)
-
-    # Plot 4: Bootstrap difference distribution (bottom center and right)
-    ax4 = plt.subplot(2, 3, (5, 6))
-
+    # Plot 2: Bootstrap difference distribution
     bootstrap_diffs = paired_results['bootstrap_diffs']
 
-    ax4.hist(bootstrap_diffs, bins=50, alpha=0.7, density=True,
+    ax2.hist(bootstrap_diffs, bins=50, alpha=0.7, density=True,
             color='lightsteelblue', edgecolor='black')
-    ax4.axvline(0, color='red', linestyle='--', linewidth=2, label='No difference')
-    ax4.axvline(paired_results['original_diff'], color='green', linestyle='-', linewidth=2,
+    ax2.axvline(0, color='red', linestyle='--', linewidth=2, label='No difference')
+    ax2.axvline(paired_results['original_diff'], color='green', linestyle='-', linewidth=2,
                label=f'Observed ({paired_results["original_diff"]:.4f})')
-    ax4.axvline(paired_results['bootstrap_ci_lower'], color='orange', linestyle=':', linewidth=2)
-    ax4.axvline(paired_results['bootstrap_ci_upper'], color='orange', linestyle=':', linewidth=2,
+    ax2.axvline(paired_results['bootstrap_ci_lower'], color='orange', linestyle=':', linewidth=2)
+    ax2.axvline(paired_results['bootstrap_ci_upper'], color='orange', linestyle=':', linewidth=2,
                label=f'95% CI [{paired_results["bootstrap_ci_lower"]:.4f}, {paired_results["bootstrap_ci_upper"]:.4f}]')
 
-    ax4.set_xlabel('AUC Difference (ESM+BigCarp MeanPool - ESM)')
-    ax4.set_ylabel('Density')
-    ax4.set_title('Paired Bootstrap Difference Distribution\nESM vs ESM+BigCarp MeanPool')
-    ax4.legend()
-    ax4.grid(axis='y', alpha=0.3)
+    ax2.set_xlabel('AUC Difference (ESM+BigCarp MeanPool - ESM)')
+    ax2.set_ylabel('Density')
+    ax2.set_title('Paired Bootstrap Difference Distribution\nESM vs ESM+BigCarp MeanPool')
+    ax2.legend()
+    ax2.grid(axis='y', alpha=0.3)
 
     textstr = f'''Statistical Summary:
 Mean Difference: {paired_results["bootstrap_mean_diff"]:+.4f}
@@ -556,13 +526,13 @@ P-value (two-sided): {paired_results["p_value_two_sided"]:.4f}
 Effective samples: {paired_results["n_bootstrap_samples"]}'''
 
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-    ax4.text(0.02, 0.98, textstr, transform=ax4.transAxes, fontsize=10,
+    ax2.text(0.02, 0.98, textstr, transform=ax2.transAxes, fontsize=10,
             verticalalignment='top', bbox=props)
 
     plt.tight_layout()
 
     os.makedirs(output_dir, exist_ok=True)
-    plt.savefig(f"{output_dir}/deep_mlp_embedding_comparison.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"{output_dir}/mlp_embedding_comparison.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -584,10 +554,10 @@ def main():
             (default: 10000)
 
     Output Files (saved to results/halogen_prediction/):
-        - deep_mlp_embedding_comparison_results.csv: Performance metrics table
-        - deep_mlp_paired_bootstrap_esm_vs_esm_bc_mean.json: Statistical test results
-        - deep_mlp_evaluation_predictions.pkl: Predictions for all embeddings
-        - deep_mlp_embedding_comparison.png: Visualization figure
+        - mlp_embedding_comparison_results.csv: Performance metrics table
+        - mlp_paired_bootstrap_esm_vs_esm_bc_mean.json: Statistical test results
+        - mlp_evaluation_predictions.pkl: Predictions for all embeddings
+        - mlp_embedding_comparison.png: Visualization figure
 
     Prints:
         - Progress updates for each pipeline stage
@@ -600,7 +570,7 @@ def main():
     OUTPUT_DIR = 'results/halogen_prediction'
 
     print("="*80)
-    print("HALOGEN PRESENCE PREDICTION: DEEP MLP EMBEDDING COMPARISON")
+    print("HALOGEN PRESENCE PREDICTION: MLP EMBEDDING COMPARISON")
     print("="*80)
 
     print("\n1. Loading dataset...")
@@ -628,7 +598,7 @@ def main():
         ("ESM+BigCarp_Domain+MeanPool", np.concatenate([esm_emb, bc_domain_emb, bc_mean_emb], axis=1)),
     ]
 
-    print(f"\n2. Evaluating {len(embedding_configs)} embedding configurations with deep MLPs...")
+    print(f"\n2. Evaluating {len(embedding_configs)} embedding configurations with MLPs...")
     print(f"   (Using LOOCV + Bootstrap with {N_BOOTSTRAP} samples)")
 
     results = []
@@ -636,7 +606,7 @@ def main():
 
     for name, embedding in embedding_configs:
         print(f"\n   {'-'*50}")
-        eval_results = evaluate_with_bootstrap_deep(embedding, y, n_bootstrap=N_BOOTSTRAP, name=name)
+        eval_results = evaluate_with_bootstrap(embedding, y, n_bootstrap=N_BOOTSTRAP, name=name)
 
         result = {
             'embedding_name': name,
@@ -665,20 +635,14 @@ def main():
     results_df = pd.DataFrame(results)
     results_df = results_df.sort_values('bootstrap_mean_auc', ascending=False).reset_index(drop=True)
 
-    print(f"\n3. Results Summary:")
+    print(f"\n3. Results Summary (AUC-ROC Rankings):")
     print("="*80)
-    print(results_df.round(4).to_string(index=False))
-
-    # Top performers analysis
-    print(f"\n4. Top Performing Methods by AUC-ROC:")
-    print("="*80)
-    top_5 = results_df.head(5)
-    for idx, row in top_5.iterrows():
+    for idx, row in results_df.iterrows():
         print(f"{idx+1:2}. {row['embedding_name']:35} | AUC: {row['bootstrap_mean_auc']:.4f} "
-              f"[{row['bootstrap_ci_lower']:.4f}-{row['bootstrap_ci_upper']:.4f}]")
+              f"[{row['bootstrap_ci_lower']:.4f}, {row['bootstrap_ci_upper']:.4f}]")
 
     # Paired Bootstrap Analysis: ESM vs ESM+BigCarp_MeanPool
-    print(f"\n5. Paired Bootstrap Analysis: ESM vs ESM+BigCarp_MeanPool")
+    print(f"\n4. Paired Bootstrap Analysis: ESM vs ESM+BigCarp_MeanPool")
     print("="*80)
 
     esm_data = evaluation_data['ESM']
@@ -694,45 +658,40 @@ def main():
     esm_results = results_df[results_df['embedding_name']=='ESM'].iloc[0]
     concat_results = results_df[results_df['embedding_name']=='ESM+BigCarp_MeanPool'].iloc[0]
 
-    print(f"\n   AUC-ROC Comparison:")
-    print(f"   ESM only:      {esm_results['auc_roc']:.4f}")
-    print(f"   ESM + BC_mean: {concat_results['auc_roc']:.4f}")
-
-    print(f"\n   Statistical Summary (AUC-ROC Difference):")
-    print(f"   Observed difference: {paired_results['original_diff']:+.4f}")
-    print(f"   Bootstrap mean: {paired_results['bootstrap_mean_diff']:+.4f}")
-    print(f"   95% CI: [{paired_results['bootstrap_ci_lower']:+.4f}, {paired_results['bootstrap_ci_upper']:+.4f}]")
-    print(f"   P-value: {paired_results['p_value_two_sided']:.4f}")
-    print(f"   Significant (p<0.05): {'Yes' if paired_results['p_value_two_sided'] < 0.05 else 'No'}")
+    print(f"   ESM AUC-ROC:                {esm_results['bootstrap_mean_auc']:.4f} [{esm_results['bootstrap_ci_lower']:.4f}, {esm_results['bootstrap_ci_upper']:.4f}]")
+    print(f"   ESM+BigCarp MeanPool AUC:   {concat_results['bootstrap_mean_auc']:.4f} [{concat_results['bootstrap_ci_lower']:.4f}, {concat_results['bootstrap_ci_upper']:.4f}]")
+    print(f"   Difference (ESM+BC - ESM):  {paired_results['original_diff']:+.4f} [{paired_results['bootstrap_ci_lower']:+.4f}, {paired_results['bootstrap_ci_upper']:+.4f}]")
+    print(f"   P-value:                    {paired_results['p_value_two_sided']:.4f} ({'significant' if paired_results['p_value_two_sided'] < 0.05 else 'not significant'})")
 
     # Create visualizations
-    print(f"\n6. Creating visualizations...")
+    print(f"\n5. Creating visualizations...")
     create_visualization(results_df, paired_results, OUTPUT_DIR)
 
     # Save results
-    print(f"\n7. Saving results...")
+    print(f"\n6. Saving results...")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    results_file = f"{OUTPUT_DIR}/deep_mlp_embedding_comparison_results.csv"
+    results_file = f"{OUTPUT_DIR}/mlp_embedding_comparison_results.csv"
     results_df.to_csv(results_file, index=False)
-    print(f"   Results table saved to: {results_file}")
+    print(f"   All metrics saved to: {results_file}")
 
-    paired_file = f"{OUTPUT_DIR}/deep_mlp_paired_bootstrap_esm_vs_esm_bc_mean.json"
+    paired_file = f"{OUTPUT_DIR}/mlp_paired_bootstrap_esm_vs_esm_bc_mean.json"
     paired_results_json = {k: (v.tolist() if isinstance(v, np.ndarray) else v)
                           for k, v in paired_results.items()}
 
     with open(paired_file, 'w') as f:
         json.dump(paired_results_json, f, indent=2)
-    print(f"   Paired bootstrap results saved to: {paired_file}")
+    print(f"   Statistical test saved to: {paired_file}")
 
-    eval_file = f"{OUTPUT_DIR}/deep_mlp_evaluation_predictions.pkl"
+    eval_file = f"{OUTPUT_DIR}/mlp_evaluation_predictions.pkl"
     with open(eval_file, 'wb') as f:
         pickle.dump(evaluation_data, f)
-    print(f"   Evaluation predictions saved to: {eval_file}")
+    print(f"   Predictions saved to: {eval_file}")
 
-    print(f"\nPipeline completed successfully!")
-    print(f"Best performing embedding: {results_df.iloc[0]['embedding_name']} "
-          f"(AUC-ROC: {results_df.iloc[0]['bootstrap_mean_auc']:.4f})")
+    print(f"\n" + "="*80)
+    print(f"Pipeline completed successfully!")
+    print(f"Best performing: {results_df.iloc[0]['embedding_name']} (AUC-ROC: {results_df.iloc[0]['bootstrap_mean_auc']:.4f})")
+    print("="*80)
 
 
 if __name__ == "__main__":

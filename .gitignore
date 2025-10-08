@@ -166,3 +166,7 @@ results/bgc_classification/**
 
 # Fine-tuning experiments
 scripts/classification/fine_tuning/
+
+# MIBiG1 evaluation files (local only)
+scripts/classification/mibig1_stratified_evaluation.py
+scripts/classification/run_mibig1_bootstrap.sh

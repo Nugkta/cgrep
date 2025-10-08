@@ -1,19 +1,96 @@
 """
-Bootstrap Evaluation for MIBiG Classification Models.
+Bootstrap Evaluation for MIBiG Classification Models
 
-This script performs bootstrap evaluation of machine learning models for biosynthetic gene 
-cluster (BGC) classification using the MIBiG database. It runs multiple evaluations with 
-different random seeds to assess model performance variability and statistical significance.
+This script performs rigorous bootstrap evaluation of machine learning models for
+biosynthetic gene cluster (BGC) classification using the MIBiG database. Multiple
+evaluations with different random seeds assess model performance variability,
+robustness, and statistical significance across different train/test splits.
 
-The bootstrap evaluation provides:
-- Mean performance metrics across multiple random seeds
-- Standard deviations to measure performance variability
-- 95% confidence intervals for statistical inference
-- Comprehensive results export in multiple formats
+Dataset:
+    The script evaluates models on MIBiG (Minimum Information about a Biosynthetic
+    Gene cluster) classification datasets. Two versions are supported:
+        - MIBiG 1.0: Original dataset with classical BGC classes
+        - MIBiG 3.0: Updated dataset with expanded annotations and classes
 
-Typical usage:
-    python bootstrap_evaluation.py --dataset mibig3 --n_seeds 10 --focus_metric macro_auc
+    Each dataset contains:
+        - Biosynthetic gene cluster sequences with structural/functional annotations
+        - Multi-label classification targets for BGC product classes
+        - Pre-computed embeddings from various representation models
+        - Stratified splits preserving class distribution
 
+Methodology:
+    - Bootstrap Resampling: Multiple evaluations with different random seeds
+    - Stratified Cross-Validation: Maintains class balance across splits
+    - Statistical Analysis: Student's t-distribution for confidence intervals
+    - Comprehensive Metrics: Macro/Micro F1, AUC-ROC (Macro/Weighted), Exact Match Accuracy
+    - Reproducibility: Fixed base seed for consistent random seed generation
+    - Robustness Testing: Minimum 3 successful runs required for statistical validity
+
+Models Evaluated:
+    The script evaluates multiple embedding approaches trained on the same classification task:
+        - ESM-2 embeddings: Protein language model representations
+        - BigCarp embeddings: Domain-specific functional embeddings
+        - Stachelhaus code: NRPS A-domain substrate binding code
+        - Concatenated embeddings: Combined representations (ESM + BigCarp, etc.)
+        - Baseline models: Random or traditional feature-based methods
+
+    All models are evaluated on identical data splits for fair comparison.
+
+Statistical Output:
+    For each model and metric, the script computes:
+        - Mean: Average performance across bootstrap runs
+        - Standard Deviation: Performance variability (sample std, ddof=1)
+        - 95% Confidence Interval: Statistical range using t-distribution
+        - Raw Values: Complete list of values from all successful runs
+        - N_Runs: Number of successful evaluations completed
+
+Output Files:
+    Results are saved in multiple formats to the bootstrap_analysis/ subdirectory:
+        1. {dataset}_bootstrap_statistics.json
+           - Complete statistics with means, stds, CIs for all metrics
+           - Includes raw values array for custom analysis
+           - JSON format for programmatic access
+
+        2. {dataset}_bootstrap_raw_results.pkl
+           - Complete evaluation results from all successful runs
+           - Pickle format preserving exact Python data structures
+           - Enables result reproduction and deeper analysis
+
+        3. {dataset}_bootstrap_summary.csv
+           - Publication-ready summary table
+           - Columns: model_name, {metric}_mean, {metric}_std, {metric}_ci_lower, {metric}_ci_upper
+           - CSV format for spreadsheet applications
+
+Command-Line Arguments:
+    --dataset: Dataset version ('mibig1' or 'mibig3') [REQUIRED]
+    --artifacts_dir: Path to model artifacts (auto: artifacts/classification/{dataset})
+    --outdir: Output directory (auto: results/{dataset}_bootstrap_evaluation)
+    --n_seeds: Number of random seeds (default: 10, recommended: 10-30 for research)
+    --base_seed: Master seed for reproducibility (default: 42)
+    --focus_metric: Primary metric for summary table (default: 'macro_auc')
+                   Options: 'macro_auc', 'macro_f1', 'weighted_auc', 'exact_match_accuracy'
+
+Usage:
+    Basic evaluation with default settings (10 seeds):
+    python bootstrap_evaluation.py --dataset mibig3
+
+    Research-grade evaluation with more seeds:
+    python bootstrap_evaluation.py --dataset mibig3 --n_seeds 30
+
+    Custom paths and focus on F1 score:
+    python bootstrap_evaluation.py --dataset mibig1 \\
+        --artifacts_dir path/to/artifacts \\
+        --outdir custom/output \\
+        --n_seeds 20 \\
+        --focus_metric macro_f1
+
+    Reproducible evaluation with specific base seed:
+    python bootstrap_evaluation.py --dataset mibig3 --base_seed 12345 --n_seeds 15
+
+Requirements:
+    - Evaluation script must exist: {dataset}_stratified_evaluation.py
+    - Artifacts directory must contain model checkpoints and embeddings
+    - Minimum 3 successful runs required for statistical analysis
 """
 
 import os

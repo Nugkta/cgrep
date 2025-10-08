@@ -9,10 +9,10 @@
 
 mkdir -p logs/halogen_prediction
 
-WORK_DIR="/home/u5bb/han00.u5bb/workspace/cgrep"
+WORK_DIR="/lus/lfs1aip2/scratch/u5bb/han00.u5bb/workspace/cgrep"
 cd $WORK_DIR
 
-source ~/miniforge3/etc/profile.d/conda.sh
+source /scratch/u5bb/han00.u5bb/miniforge3/etc/profile.d/conda.sh
 conda activate cgrep
 
 if [ $? -ne 0 ]; then
