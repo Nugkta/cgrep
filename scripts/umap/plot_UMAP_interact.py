@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 UMAP Interactive Plotting Script for Pfam Domain Embeddings
 
@@ -85,7 +84,23 @@ plt.rcParams.update({
 
 
 def parse_args():
-    """Parse command line arguments"""
+    """Parse command line arguments for UMAP plotting script.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments with the following attributes:
+            - vocab_file (str): Path to domain vocabulary JSON file
+            - clans_file (str): Path to PFAM clans CSV file
+            - embeddings (str): Path to embeddings .pt file or directory containing .pt files
+            - results_dir (str): Output directory for saving plots
+            - technique (str): Dimensionality reduction method ('pca', 'tsne', or 'umap')
+            - tag (str): Optional tag for output filenames
+            - plot_by_presence (bool): Whether to create plots colored by domain presence
+            - plot_by_product_class (bool): Whether to create plots colored by product class
+            - plot_by_function_label (bool): Whether to create plots colored by function labels
+            - product_class_file (str): Path to JSON file with product class mappings
+            - function_labels_csv (str): Path to CSV file with function labels
+            - no_interactive (bool): Whether to skip interactive HTML plots
+    """
     parser = argparse.ArgumentParser(description='Plot PFAM domain embeddings')
     parser.add_argument('vocab_file', help='Path to domain vocabulary JSON')
     parser.add_argument('clans_file', help='Path to PFAM clans CSV file')
@@ -107,7 +122,16 @@ def parse_args():
 
 
 def load_embeddings(emb_path):
-    """Load embeddings from file or directory"""
+    """Load embeddings from a .pt file or directory containing multiple .pt files.
+
+    Args:
+        emb_path (str): Path to a single .pt file or directory containing .pt files
+
+    Returns:
+        list of tuple: List of (filepath, embeddings_array) tuples, where:
+            - filepath (str): Full path to the .pt file
+            - embeddings_array (numpy.ndarray): Loaded embeddings as numpy array
+    """
     if os.path.isdir(emb_path):
         files = sorted(glob.glob(os.path.join(emb_path, '*.pt')))
     else:
@@ -124,7 +148,24 @@ def load_embeddings(emb_path):
 
 
 def load_metadata(args):
-    """Load all metadata (domains, clans, product classes, function labels)"""
+    """Load all metadata including domains, clans, product classes, and function labels.
+
+    Args:
+        args (argparse.Namespace): Parsed command line arguments containing:
+            - vocab_file: Path to domain vocabulary JSON
+            - clans_file: Path to PFAM clans CSV
+            - plot_by_product_class: Flag to load product classes
+            - product_class_file: Path to product class mappings JSON
+            - plot_by_function_label: Flag to load function labels
+            - function_labels_csv: Path to function labels CSV
+
+    Returns:
+        dict: Dictionary with the following keys:
+            - domains (list of str): List of domain identifiers
+            - clans (list of str or None): Clan assignments for each domain
+            - product_classes (list of str or None): Product class labels (if requested)
+            - function_labels (list of str or None): Functional annotations (if requested)
+    """
     # Load vocabulary
     with open(args.vocab_file) as f:
         vocab = json.load(f)
@@ -156,7 +197,18 @@ def load_metadata(args):
 
 
 def apply_dimensionality_reduction(embeddings, technique):
-    """Apply dimensionality reduction technique"""
+    """Apply dimensionality reduction to high-dimensional embeddings.
+
+    Args:
+        embeddings (numpy.ndarray): Input embeddings matrix of shape (n_samples, n_features)
+        technique (str): Dimensionality reduction method, one of:
+            - 'tsne': t-SNE with 2 components
+            - 'umap': UMAP with cosine distance, n_neighbors=10, min_dist=0.05
+            - 'pca': Principal Component Analysis with 2 components
+
+    Returns:
+        numpy.ndarray: 2D coordinates of shape (n_samples, 2) after dimensionality reduction
+    """
     if technique == 'tsne':
         return TSNE(n_components=2, random_state=SEED).fit_transform(embeddings)
     elif technique == 'umap':
@@ -169,7 +221,20 @@ def apply_dimensionality_reduction(embeddings, technique):
 
 
 def save_plot(fig_or_path, results_dir, tag, emb_name, plot_type, timestamp):
-    """Save plot with consistent naming and error handling"""
+    """Save plot to disk with consistent naming convention and error handling.
+
+    Args:
+        fig_or_path (matplotlib.figure.Figure or plotly.graph_objs.Figure): Figure object to save
+        results_dir (str): Base output directory
+        tag (str): Tag for organizing output files
+        emb_name (str): Name of the embedding file being processed
+        plot_type (str): Type of plot ('clans', 'product_classes', 'function_labels', 'interactive', etc.)
+        timestamp (str): Timestamp string for unique filenames
+
+    Output:
+        Saves file to: results_dir/umap/tag/emb_name/umap_{plot_type}_{timestamp}.pdf (or .html)
+        Prints confirmation message or error if saving fails
+    """
     # Create subdirectory structure: results_dir/umap/tag/emb_name/
     subdir = os.path.join(results_dir, 'umap', tag, emb_name)
     os.makedirs(subdir, exist_ok=True)
@@ -227,7 +292,18 @@ def create_static_plot(embed_df, technique, hue_col, title, palette='Paired'):
 
 
 def _prepare_plot_data(embed_df, hue_col, palette):
-    """Prepare plot data and color palette based on hue column type"""
+    """Prepare plot data and color palette based on the hue column type.
+
+    Args:
+        embed_df (pandas.DataFrame): DataFrame containing embeddings and metadata
+        hue_col (str): Column name to use for color-coding ('clans', 'product_classes', 'function_labels', etc.)
+        palette (str): Seaborn color palette name
+
+    Returns:
+        tuple: (filtered_dataframe, color_list) where:
+            - filtered_dataframe (pandas.DataFrame): Data filtered by top categories or specific criteria
+            - color_list (list or None): List of colors or None if no hue column
+    """
     # Function labels: filter out 'other' and use specific colors
     if hue_col == 'function_labels' and 'function_labels' in embed_df.columns:
         plot_df = embed_df[embed_df['function_labels'].notna()]
@@ -258,7 +334,15 @@ def _prepare_plot_data(embed_df, hue_col, palette):
 
 
 def _format_plot(ax, technique):
-    """Format plot axes and legend"""
+    """Format plot axes, ticks, and legend styling.
+
+    Args:
+        ax (matplotlib.axes.Axes): Axes object to format
+        technique (str): Dimensionality reduction technique name for axis labels
+
+    Output:
+        Modifies axes in-place by setting labels, removing ticks, and styling legend
+    """
     ax.set_xlabel(f'{technique.upper()} 1', fontsize=26)
     ax.set_ylabel(f'{technique.upper()} 2', fontsize=26)
 
@@ -277,7 +361,17 @@ def _format_plot(ax, technique):
 
 
 def create_interactive_plot(embed_df, technique, hue_col, title):
-    """Create interactive plotly plot"""
+    """Create an interactive scatter plot using plotly for web-based exploration.
+
+    Args:
+        embed_df (pandas.DataFrame): DataFrame with dimensionality-reduced coordinates and metadata
+        technique (str): Dimensionality reduction technique name for axis labels
+        hue_col (str): Column name to use for color-coding points
+        title (str): Plot title (currently unused in implementation)
+
+    Returns:
+        plotly.graph_objs.Figure or None: Interactive plotly figure object, or None if plotly unavailable
+    """
     try:
         import plotly.express as px
         
@@ -303,6 +397,21 @@ def create_interactive_plot(embed_df, technique, hue_col, title):
 
 
 def main():
+    """Main execution function that orchestrates the entire plotting workflow.
+
+    Workflow:
+        1. Parse command line arguments
+        2. Load embeddings from file(s) and metadata (domains, clans, labels)
+        3. For each embedding file:
+            - Apply dimensionality reduction (UMAP/PCA/t-SNE)
+            - Create DataFrame with coordinates and metadata
+            - Generate static PDF plots (by clan, product class, function, presence)
+            - Generate interactive HTML plot (if not disabled)
+        4. Save all plots to organized directory structure
+
+    Output:
+        Saves plots to: results_dir/umap/tag/embedding_name/umap_{plot_type}_{timestamp}.pdf|.html
+    """
     args = parse_args()
     os.makedirs(args.results_dir, exist_ok=True)
     
