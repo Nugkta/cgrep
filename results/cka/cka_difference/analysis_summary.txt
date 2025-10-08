@@ -3,23 +3,15 @@ CKA Difference Analysis Results
 
 ESM-initialised checkpoint: artifacts/bigcarp/bigcarp_models/run_esm_init/checkpoint_latest.tar
 Random checkpoint: artifacts/bigcarp/bigcarp_models/run_random_init/checkpoint_best.tar
-ESM-initialised checkpoint number: None
-Random checkpoint number: None
 
 Difference Statistics (ESM-initialised - Random):
-Mean difference: 0.048974
-Std difference: 0.059044
-Max difference: 0.131973
-Min difference: -0.227344
-Mean absolute difference: 0.063154
+Mean difference: 0.049654
+Std difference: 0.059085
+Max difference: 0.133050
+Min difference: -0.227107
+Mean absolute difference: 0.063453
 
 Frobenius Norms:
-ESM-initialised CKA matrix: 28.503963
-Random CKA matrix: 26.943939
-Difference matrix: 2.531481
-
-Interpretation:
-- Small differences suggest convergent layer coordination
-- Large differences suggest distinct coordination patterns
-- Red areas: ESM-initialised has higher CKA than Random
-- Blue areas: Random has higher CKA than ESM-initialised
+ESM-initialised CKA matrix: 28.512339
+Random CKA matrix: 26.934631
+Difference matrix: 2.546896

@@ -7,6 +7,6 @@ Number of random checkpoints analyzed: 41
 
 Final similarities:
 ESM-initialised Embedder vs ESM-initialised Embedder (final): 0.9538
-ESM-initialised Embedder vs ESM-initialised Last Layer (final): 0.3109
-ESM-initialised Embedder vs Random Last Layer (final): 0.1087
-Random Embedder vs Random Last Layer (final): 0.3074
+ESM-initialised Embedder vs ESM-initialised Last Layer (final): 0.2847
+ESM-initialised Embedder vs Random Last Layer (final): 0.1099
+Random Embedder vs Random Last Layer (final): 0.3110

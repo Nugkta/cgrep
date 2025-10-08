@@ -1,41 +1,49 @@
 """
 CKA Difference Heatmap Analysis for BigCARP Models
+===================================================
 
-This script compares the internal layer coordination between ESM-initialised and random models
-at a specific checkpoint by:
-1. Computing CKA matrix for ESM-initialised model vs itself at checkpoint N
-2. Computing CKA matrix for random model vs itself at checkpoint N
-3. Creating a difference heatmap to show convergence of embedding space coordination
+This script analyzes internal layer coordination differences between ESM-initialized
+and random-initialized models by computing layer-wise CKA similarity matrices and
+their difference.
 
-The difference plot helps visualize whether the inner coordination between different layers
-converges to be similar between ESM-initialised and random initialized models.
+Analysis Strategy:
+    1. Compute self-CKA matrix for ESM-initialized model (all layers vs all layers)
+    2. Compute self-CKA matrix for random-initialized model (all layers vs all layers)
+    3. Calculate difference matrix: CKA_ESM - CKA_Random
+    4. Visualize with heatmaps to identify coordination patterns
+
+Interpretation:
+    - Diagonal: Layer self-similarity (always 1.0)
+    - Off-diagonal: Inter-layer coordination
+    - Positive differences: ESM-initialized shows higher coordination
+    - Negative differences: Random-initialized shows higher coordination
+    - Block patterns: Groups of coordinated layers
+
+Model Types:
+    - ESM-initialized: ByteNetLM with pretrained ESM embeddings (optionally frozen)
+    - Random-initialized: ByteNetLM with random weight initialization
+
+Metrics:
+    - CKA similarity matrices (n_layers × n_layers)
+    - Difference statistics (mean, std, min, max, Frobenius norm)
 
 Usage:
-    python scripts/cka/cka_difference_heatmap.py \
-        --pretrained_checkpoint path/to/esm_initialised/checkpoint50.tar \
-        --random_checkpoint path/to/random/checkpoint50.tar \
-        --fcorpus data/corpus.csv \
-        --fvocab data/vocab.json \
-        --d_embedding 1280 \
-        --d_model 256 \
-        --n_layers 32 \
-        --output_dir results/cka_difference
+    python cka_difference.py \\
+        --pretrained_checkpoint checkpoints/esm_init/checkpoint_epoch10.tar \\
+        --random_checkpoint checkpoints/random_init/checkpoint_epoch10.tar \\
+        --fcorpus data/corpus.txt \\
+        --fvocab data/vocab.txt \\
+        --n_layers 32 \\
+        --n_batches 8
 
-    conda activate cgrep && srun --gpus=1 --time=01:00:00 python scripts/cka/cka_difference_heatmap.py \
-    --pretrained_checkpoint artifacts/bigcarp/bigcarp_models/run_esm_init/checkpoint_latest.tar \
-    --random_checkpoint artifacts/bigcarp/bigcarp_models/run_random_init/checkpoint_best.tar \
-    --fcorpus data/processed/bgc_corpus/antidb_pfam_corpus.csv \
-    --fvocab data/processed/vocabularies/pfam_vocab_present.json \
-    --d_embedding 1280 \
-    --d_model 256 \
-    --n_layers 32 \
-    --kernel_size 3 \
-    --r 128 \
-    --batch_size 128 \
-    --gpu 0 \
-    --output_dir results/cka \
-    --n_batches 32 \
-    --unconditional
+Output Files:
+    - pretrained_cka_matrix.npy: ESM-initialized self-CKA matrix
+    - random_cka_matrix.npy: Random-initialized self-CKA matrix
+    - cka_difference_matrix.npy: Difference matrix
+    - pretrained_cka_heatmap.pdf: ESM-initialized heatmap visualization
+    - random_cka_heatmap.pdf: Random-initialized heatmap visualization
+    - cka_difference_heatmap.pdf: Difference heatmap visualization
+    - analysis_summary.txt: Statistical summary of differences
 """
 
 import os
@@ -44,15 +52,9 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-from datetime import datetime
 
 from sequence_models.convolutional import ByteNetLM
-from sequence_models.collaters import _pad
-
-# Import shared BigCARP functions from the cgrep package
-from cgrep.bigcarp_functions import load_data, ListDataset, mlm_collate_fn, prepare_dataloaders
+from cgrep.bigcarp_functions import load_data, prepare_dataloaders
 
 # Publication-quality plotting setup
 plt.style.use('default')  # Use clean default style
@@ -80,6 +82,12 @@ plt.rcParams.update({
 })
 
 def get_parser():
+    """
+    Create argument parser for CKA difference heatmap analysis.
+
+    Returns:
+        argparse.ArgumentParser: Configured parser with all required and optional arguments
+    """
     parser = argparse.ArgumentParser(description='CKA difference heatmap analysis of BIGCARP models')
     
     # Paths to specific checkpoints
@@ -124,7 +132,27 @@ def get_parser():
     return parser
 
 def load_model(checkpoint_path, n_tokens, mask_idx, domains, is_frozen, args):
-    """Load a ByteNetLM model from checkpoint"""
+    """
+    Load a ByteNetLM model from checkpoint file.
+
+    Args:
+        checkpoint_path (str): Path to checkpoint .tar file
+        n_tokens (int): Vocabulary size
+        mask_idx (int): Index for mask token
+        domains (list): List of domain tokens for frozen embedding calculation
+        is_frozen (bool): Whether to use frozen embeddings
+        args (argparse.Namespace): Arguments containing model architecture parameters:
+            - d_embedding (int): Embedding dimension
+            - d_model (int): Model hidden dimension
+            - n_layers (int): Number of ByteNet layers
+            - kernel_size (int): Convolution kernel size
+            - r (int): Dilation factor base
+            - wide (bool): Use wide ByteNet variant
+            - ar (bool): Use autoregressive (causal) model
+
+    Returns:
+        ByteNetLM: Loaded model with checkpoint weights
+    """
     # Calculate number of frozen embeddings if needed
     n_frozen_embs = None
     if is_frozen:
@@ -150,17 +178,46 @@ def load_model(checkpoint_path, n_tokens, mask_idx, domains, is_frozen, args):
     model.load_state_dict(checkpoint['model_state_dict'])
     return model
 
-def compute_cka_matrix_self(model, dataloader, device, n_batches=8):
+def compute_cka_matrix_self(model, dataloader, device, padding_idx, n_batches=8):
     """
-    Compute CKA matrix for a model compared to itself (all layers vs all layers)
+    Compute self-CKA matrix for a model (all layers vs all layers).
+
+    Computes pairwise CKA similarity between all layer representations within a single model.
+    Uses batch accumulation to efficiently compute HSIC and variance terms across multiple batches.
+
+    Implementation:
+        - Accumulates HSIC (Hilbert-Schmidt Independence Criterion) across batches
+        - Accumulates variance terms for normalization
+        - Final CKA = HSIC / sqrt(var1 * var2) for each layer pair
+
+    Args:
+        model (ByteNetLM): Model to analyze
+        dataloader (DataLoader): Data loader for evaluation samples
+        device (torch.device): Device for computation (CPU or CUDA)
+        padding_idx (int): Token ID used for padding (positions to exclude from CKA)
+        n_batches (int): Number of batches to use for CKA computation (default: 8)
+
+    Returns:
+        numpy.ndarray: Self-CKA matrix of shape (n_layers, n_layers) with values in [0, 1].
+            Element [i, j] represents CKA similarity between layer i and layer j.
+            Diagonal elements are always 1.0 (perfect self-similarity).
     """
     model.eval()
 
     hsic_sum = var1_sum = var2_sum = None
 
-    for _ in range(n_batches):
-        src, _, _ = [b.to(device) for b in next(iter(dataloader))]
-        input_mask = (src != 0).float().unsqueeze(-1)
+    # Create iterator once to properly iterate through different batches
+    dataloader_iter = iter(dataloader)
+
+    for batch_idx in range(n_batches):
+        try:
+            batch = next(dataloader_iter)
+        except StopIteration:
+            # If we run out of batches, break early
+            break
+
+        src, _, _ = [b.to(device) for b in batch]
+        input_mask = (src != padding_idx).float().unsqueeze(-1)
         mask_flat = input_mask.squeeze(-1).reshape(-1).bool()
 
         with torch.no_grad():
@@ -196,40 +253,29 @@ def compute_cka_matrix_self(model, dataloader, device, n_batches=8):
     cka_matrix = (hsic_sum / denom).cpu().numpy()
     return cka_matrix
 
-def extract_checkpoint_info(checkpoint_path):
-    """Extract checkpoint number and model type from path"""
-    filename = os.path.basename(checkpoint_path)
-    
-    # Try to extract checkpoint number
-    import re
-    patterns = [
-        r'checkpoint_epoch(\d+)\.tar',
-        r'checkpoint(\d+)\.tar',
-        r'epoch(\d+)\.tar'
-    ]
-    
-    checkpoint_num = None
-    for pattern in patterns:
-        match = re.search(pattern, filename)
-        if match:
-            checkpoint_num = int(match.group(1))
-            break
-    
-    # Try to determine model type from path
-    model_type = "unknown"
-    if "pretrain" in checkpoint_path.lower() or "_pt_" in checkpoint_path.lower():
-        model_type = "pretrained"
-    elif "random" in checkpoint_path.lower() or "_rd_" in checkpoint_path.lower():
-        model_type = "random"
-    
-    return checkpoint_num, model_type
 
-def create_heatmap_plot(cka_matrix, title, output_path, model_name=""):
-    """Create and save a single CKA heatmap"""
+def create_heatmap_plot(cka_matrix, output_path, model_name=""):
+    """
+    Create and save a CKA similarity heatmap visualization.
+
+    Generates a square heatmap with viridis colormap showing layer-wise CKA similarities.
+    Includes intelligently spaced axis tick labels to avoid overcrowding.
+
+    Args:
+        cka_matrix (numpy.ndarray): CKA similarity matrix of shape (n_layers, n_layers)
+        output_path (str): Path to save the PDF plot
+        model_name (str): Model name for axis labels (default: "")
+
+    Output:
+        - Saves PDF file at output_path with 300 DPI resolution
+        - Colormap range: [0, 1]
+        - Square aspect ratio
+        - Publication-quality formatting
+    """
     fig, ax = plt.subplots(figsize=(10, 8))
 
     num_layers = len(cka_matrix)
-    step = max(1, num_layers // 8)  # Show about 8 ticks for readability
+    step = max(1, num_layers // 8)
     tick_positions = np.arange(0, num_layers, step)
     if num_layers - 1 not in tick_positions:
         tick_positions = np.append(tick_positions, num_layers - 1)
@@ -237,7 +283,6 @@ def create_heatmap_plot(cka_matrix, title, output_path, model_name=""):
 
     tick_labels = [f"Layer {int(i)}" for i in tick_positions]
 
-    # Create heatmap
     sns.heatmap(
         cka_matrix,
         annot=False,
@@ -251,26 +296,44 @@ def create_heatmap_plot(cka_matrix, title, output_path, model_name=""):
         ax=ax
     )
 
-    # Set explicit tick positions and labels
     ax.set_xticks(tick_positions)
     ax.set_xticklabels(tick_labels, rotation=45, ha='right')
     ax.set_yticks(tick_positions)
     ax.set_yticklabels(tick_labels, rotation=0)
-
-    # Invert Y axis so Layer 0 is at the bottom
     ax.invert_yaxis()
 
     ax.set_xlabel(f'Layers ({model_name})')
     ax.set_ylabel(f'Layers ({model_name})')
-    # ax.set_title(title, fontweight='bold', pad=20)
     plt.tight_layout()
 
     plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
     plt.close()
 
-def create_difference_plot(pretrained_cka, random_cka, output_path, checkpoint_info=""):
-    """Create and save the difference heatmap"""
-    # Compute difference (pretrained - random)
+def create_difference_plot(pretrained_cka, random_cka, output_path):
+    """
+    Create and save CKA difference heatmap (ESM-initialized - Random).
+
+    Visualizes the difference between ESM-initialized and random-initialized CKA matrices
+    using a diverging colormap (red-blue) centered at zero.
+
+    Interpretation:
+        - Blue regions: ESM-initialized has lower coordination than random
+        - Red regions: ESM-initialized has higher coordination than random
+        - White regions: Similar coordination between initializations
+
+    Args:
+        pretrained_cka (numpy.ndarray): ESM-initialized CKA matrix (n_layers, n_layers)
+        random_cka (numpy.ndarray): Random-initialized CKA matrix (n_layers, n_layers)
+        output_path (str): Path to save the PDF plot
+
+    Returns:
+        numpy.ndarray: Difference matrix (pretrained_cka - random_cka)
+
+    Output:
+        - Saves PDF file at output_path with 300 DPI resolution
+        - Colormap: RdBu_r (diverging, centered at 0)
+        - Symmetric color limits: [-max_abs_diff, +max_abs_diff]
+    """
     difference = pretrained_cka - random_cka
 
     fig, ax = plt.subplots(figsize=(12, 10))
@@ -283,14 +346,12 @@ def create_difference_plot(pretrained_cka, random_cka, output_path, checkpoint_i
         tick_positions = np.unique(tick_positions)
 
     tick_labels = [f"Layer {int(i)}" for i in tick_positions]
-
-    # Use a diverging colormap centered at 0
     max_abs_diff = np.max(np.abs(difference))
 
     sns.heatmap(
         difference,
         annot=False,
-        cmap='RdBu_r',  # Red-Blue diverging colormap
+        cmap='RdBu_r',
         center=0,
         cbar_kws={'label': 'CKA Difference (ESM-initialised - Random)', 'shrink': 0.8},
         xticklabels=False,
@@ -301,19 +362,14 @@ def create_difference_plot(pretrained_cka, random_cka, output_path, checkpoint_i
         ax=ax
     )
 
-    # Set explicit tick positions and labels
     ax.set_xticks(tick_positions)
     ax.set_xticklabels(tick_labels, rotation=45, ha='right')
     ax.set_yticks(tick_positions)
     ax.set_yticklabels(tick_labels, rotation=0)
-
-    # Invert Y axis so Layer 0 is at the bottom
     ax.invert_yaxis()
 
     ax.set_xlabel('Layers')
     ax.set_ylabel('Layers')
-    # ax.set_title(f'CKA Difference: ESM-initialised vs Random \n{checkpoint_info}',
-    #              fontweight='bold', pad=20)
     plt.tight_layout()
 
     plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
@@ -322,103 +378,108 @@ def create_difference_plot(pretrained_cka, random_cka, output_path, checkpoint_i
     return difference
 
 def main():
-    # Parse arguments
+    """
+    Main pipeline for CKA difference analysis.
+
+    Pipeline:
+        1. Load data and create dataloader
+        2. Load ESM-initialized and random-initialized checkpoint models
+        3. Compute self-CKA matrix for ESM-initialized model
+        4. Compute self-CKA matrix for random-initialized model
+        5. Calculate difference matrix
+        6. Generate three heatmap visualizations:
+           - ESM-initialized self-CKA
+           - Random-initialized self-CKA
+           - Difference heatmap
+        7. Compute and save statistical summary
+
+    Command-line Arguments:
+        Required:
+            --pretrained_checkpoint: Path to ESM-initialized checkpoint file
+            --random_checkpoint: Path to random-initialized checkpoint file
+            --fcorpus: Path to corpus file
+            --fvocab: Path to vocabulary file
+
+        Optional:
+            --d_embedding: Embedding dimension (default: 1280)
+            --d_model: Model dimension (default: 256)
+            --n_layers: Number of layers (default: 32)
+            --n_batches: Batches for CKA computation (default: 8)
+            --batch_size: Batch size (default: 32)
+            --gpu: GPU device ID (default: 0)
+            --pretrained_frozen: Use frozen embeddings for ESM-initialized
+            --random_frozen: Use frozen embeddings for random-initialized
+
+    Output Files:
+        - pretrained_cka_matrix.npy: ESM-initialized CKA matrix
+        - random_cka_matrix.npy: Random-initialized CKA matrix
+        - cka_difference_matrix.npy: Difference matrix
+        - pretrained_cka_heatmap.pdf: ESM-initialized heatmap
+        - random_cka_heatmap.pdf: Random-initialized heatmap
+        - cka_difference_heatmap.pdf: Difference heatmap
+        - analysis_summary.txt: Statistics (mean, std, min, max, Frobenius norms)
+    """
     parser = get_parser()
     args = parser.parse_args()
-    
-    # Create timestamped directory for this run
-    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # run_output_dir = os.path.join(args.output_dir, f"cka_difference_{timestamp}")
-    run_output_dir = os.path.join(args.output_dir, f"cka_difference")
+
+    run_output_dir = os.path.join(args.output_dir, "cka_difference")
     os.makedirs(run_output_dir, exist_ok=True)
     print(f"Output will be saved to: {run_output_dir}")
-    
-    # Set device
+
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     torch.cuda.set_device(args.gpu)
-    
-    # Load vocabulary and data
+
     print("Loading data...")
-    args.fdata = None  # Not needed for this script
+    args.fdata = None
     (train_tokens, test_tokens,
      specials, domains, domain_tokens,
      n_tokens, padding_idx, mask_idx,
      _, _) = load_data(args)
-    
-    # Prepare DataLoader
+
     print("Preparing dataloader...")
     dataloaders = prepare_dataloaders(
         test_tokens, test_tokens, domain_tokens, mask_idx,
         padding_idx, batch_size=args.batch_size, num_workers=4
     )
     dl_test = dataloaders[0]
-    
-    # Extract checkpoint information
-    pretrained_ckp_num, pretrained_type = extract_checkpoint_info(args.pretrained_checkpoint)
-    random_ckp_num, random_type = extract_checkpoint_info(args.random_checkpoint)
-    
-    print(f"Analyzing ESM-initialised checkpoint: {pretrained_ckp_num} ({pretrained_type})")
-    print(f"Analyzing random checkpoint: {random_ckp_num} ({random_type})")
 
-    # Load ESM-initialised model
     print(f"Loading ESM-initialised model from {args.pretrained_checkpoint}")
     pretrained_model = load_model(args.pretrained_checkpoint, n_tokens, mask_idx, domains, args.pretrained_frozen, args)
     pretrained_model.to(device)
 
-    # Load random model
     print(f"Loading random model from {args.random_checkpoint}")
     random_model = load_model(args.random_checkpoint, n_tokens, mask_idx, domains, args.random_frozen, args)
     random_model.to(device)
 
-    # Compute CKA matrices
     print("Computing CKA matrix for ESM-initialised model vs itself...")
-    pretrained_cka = compute_cka_matrix_self(pretrained_model, dl_test, device, args.n_batches)
+    pretrained_cka = compute_cka_matrix_self(pretrained_model, dl_test, device, padding_idx, args.n_batches)
 
     print("Computing CKA matrix for random model vs itself...")
-    random_cka = compute_cka_matrix_self(random_model, dl_test, device, args.n_batches)
-    
-    # Save raw CKA matrices
+    random_cka = compute_cka_matrix_self(random_model, dl_test, device, padding_idx, args.n_batches)
+
     np.save(os.path.join(run_output_dir, 'pretrained_cka_matrix.npy'), pretrained_cka)
     np.save(os.path.join(run_output_dir, 'random_cka_matrix.npy'), random_cka)
-    
-    # Create individual heatmaps
-    pretrained_name = f"ESM-initialised (ckp {pretrained_ckp_num})" if pretrained_ckp_num else "ESM-initialised"
-    random_name = f"Random (ckp {random_ckp_num})" if random_ckp_num else "Random"
 
     create_heatmap_plot(
         pretrained_cka,
-        f'CKA Self-Similarity: {pretrained_name}',
         os.path.join(run_output_dir, 'pretrained_cka_heatmap.pdf'),
-        pretrained_name
+        "ESM-initialised"
     )
-    
+
     create_heatmap_plot(
         random_cka,
-        f'CKA Self-Similarity: {random_name}',
         os.path.join(run_output_dir, 'random_cka_heatmap.pdf'),
-        random_name
+        "Random"
     )
-    
-    # Create difference plot
-    checkpoint_info = ""
-    if pretrained_ckp_num and random_ckp_num:
-        checkpoint_info = f"(Checkpoints: ESM-initialised {pretrained_ckp_num}, Random {random_ckp_num})"
-    
+
     difference_matrix = create_difference_plot(
         pretrained_cka, random_cka,
-        os.path.join(run_output_dir, 'cka_difference_heatmap.pdf'),
-        checkpoint_info
+        os.path.join(run_output_dir, 'cka_difference_heatmap.pdf')
     )
-    
-    # Save difference matrix
+
     np.save(os.path.join(run_output_dir, 'cka_difference_matrix.npy'), difference_matrix)
-    
-    # Calculate and save statistics
+
     stats = {
-        'pretrained_checkpoint': args.pretrained_checkpoint,
-        'random_checkpoint': args.random_checkpoint,
-        'pretrained_ckp_num': pretrained_ckp_num,
-        'random_ckp_num': random_ckp_num,
         'difference_mean': float(np.mean(difference_matrix)),
         'difference_std': float(np.std(difference_matrix)),
         'difference_max': float(np.max(difference_matrix)),
@@ -428,19 +489,12 @@ def main():
         'frobenius_norm_random': float(np.linalg.norm(random_cka, 'fro')),
         'frobenius_norm_difference': float(np.linalg.norm(difference_matrix, 'fro'))
     }
-    
-    # Save configuration and results
-    with open(os.path.join(run_output_dir, 'run_config.txt'), 'w') as f:
-        for arg, value in vars(args).items():
-            f.write(f"{arg}: {value}\n")
-    
+
     with open(os.path.join(run_output_dir, 'analysis_summary.txt'), 'w') as f:
         f.write("CKA Difference Analysis Results\n")
         f.write("===============================\n\n")
         f.write(f"ESM-initialised checkpoint: {args.pretrained_checkpoint}\n")
-        f.write(f"Random checkpoint: {args.random_checkpoint}\n")
-        f.write(f"ESM-initialised checkpoint number: {pretrained_ckp_num}\n")
-        f.write(f"Random checkpoint number: {random_ckp_num}\n\n")
+        f.write(f"Random checkpoint: {args.random_checkpoint}\n\n")
 
         f.write("Difference Statistics (ESM-initialised - Random):\n")
         f.write(f"Mean difference: {stats['difference_mean']:.6f}\n")
@@ -448,33 +502,17 @@ def main():
         f.write(f"Max difference: {stats['difference_max']:.6f}\n")
         f.write(f"Min difference: {stats['difference_min']:.6f}\n")
         f.write(f"Mean absolute difference: {stats['difference_abs_mean']:.6f}\n\n")
-        
+
         f.write("Frobenius Norms:\n")
         f.write(f"ESM-initialised CKA matrix: {stats['frobenius_norm_pretrained']:.6f}\n")
         f.write(f"Random CKA matrix: {stats['frobenius_norm_random']:.6f}\n")
-        f.write(f"Difference matrix: {stats['frobenius_norm_difference']:.6f}\n\n")
-        
-        f.write("Interpretation:\n")
-        f.write("- Small differences suggest convergent layer coordination\n")
-        f.write("- Large differences suggest distinct coordination patterns\n")
-        f.write("- Red areas: ESM-initialised has higher CKA than Random\n")
-        f.write("- Blue areas: Random has higher CKA than ESM-initialised\n")
-    
-    # Clean up models
+        f.write(f"Difference matrix: {stats['frobenius_norm_difference']:.6f}\n")
+
     del pretrained_model
     del random_model
     torch.cuda.empty_cache()
-    
+
     print(f"\nAnalysis complete. Results saved to {run_output_dir}")
-    print("Generated files:")
-    print(f"  - pretrained_cka_heatmap.pdf: ESM-initialised model self-similarity")
-    print(f"  - random_cka_heatmap.pdf: Random model self-similarity")
-    print(f"  - cka_difference_heatmap.pdf: Difference plot (main result)")
-    print(f"  - pretrained_cka_matrix.npy: Raw ESM-initialised CKA matrix")
-    print(f"  - random_cka_matrix.npy: Raw random CKA matrix")
-    print(f"  - cka_difference_matrix.npy: Raw difference matrix")
-    print(f"  - analysis_summary.txt: Statistical analysis")
-    print(f"  - run_config.txt: Configuration used")
 
 if __name__ == "__main__":
     main()
