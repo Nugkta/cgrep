@@ -12,10 +12,10 @@ using MIBiG 3.0 data with stratified 5-fold cross-validation.
     standalone for single-seed evaluation.
 
 Embedding Types Evaluated:
-    - ESM-initialized BigCarp (last layer & embedder)
-    - Random-initialized BigCarp (last layer & embedder)
+    - ESM-initialized bigcarp (last layer & embedder)
+    - Random-initialized bigcarp (last layer & embedder)
     - ESM embeddings (pretrained)
-    - ESM + BigCarp concatenated
+    - ESM + bigcarp concatenated
     - Pfam2vec embeddings
     - Random baseline (domain-consistent)
 
@@ -189,12 +189,12 @@ def prepare_embedding_data(data, embedding_type):
 
 def create_concatenated_embeddings(esm_df, bigcarp_df):
     """
-    Concatenate ESM and BigCarp embeddings for each BGC.
+    Concatenate ESM and bigcarp embeddings for each BGC.
 
     Args:
         esm_df (pandas.DataFrame): DataFrame with ESM embeddings
             Must contain: 'bgc_id', 'esm_embeddings', 'product_class'
-        bigcarp_df (pandas.DataFrame): DataFrame with BigCarp embeddings
+        bigcarp_df (pandas.DataFrame): DataFrame with bigcarp embeddings
             Must contain: 'bgc_id', 'embeddings', 'product_class'
 
     Returns:
@@ -739,7 +739,7 @@ def main():
 
     Pipeline:
         1. Load all embedding data
-        2. Evaluate MLP models on BigCarp/ESM embeddings
+        2. Evaluate MLP models on bigcarp/ESM embeddings
         3. Evaluate Random Forest on Pfam2vec
         4. Evaluate random baselines
         5. Save comparison tables and detailed results
@@ -768,7 +768,7 @@ def main():
         ("random_init_last", "Random Init Last + MLP"),
         ("random_init_embedder", "Random Init Embedder + MLP"),
         ("esm_embeddings", "ESM Embeddings + MLP"),
-        ("esm_bigcarp_concatenated", "ESM + BigCarp Concatenated + MLP"),
+        ("esm_bigcarp_concatenated", "ESM + bigcarp Concatenated + MLP"),
     ]
 
     all_results = []

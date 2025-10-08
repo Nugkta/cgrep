@@ -20,7 +20,7 @@ Dataset:
     The dataset includes multiple embedding representations:
         - ESM-2 embeddings: Protein language model embeddings (per-residue)
         - Stachelhaus code embeddings: Domain-specific code embeddings (per-residue)
-        - BigCarp embeddings: Functional domain embeddings (fixed-size)
+        - bigcarp embeddings: Functional domain embeddings (fixed-size)
 
 Methodology:
     - Stratified K-Fold Cross-Validation (default: 5 folds) for balanced evaluation
@@ -32,10 +32,10 @@ Methodology:
 Embeddings Evaluated:
     1. ESM Mean Pool: Mean-pooled ESM-2 embeddings across sequence
     2. Stachelhaus Mean Pool: Mean-pooled Stachelhaus code embeddings
-    3. BigCarp: BigCarp domain embeddings (as-is)
+    3. bigcarp: bigcarp domain embeddings (as-is)
     4. Random 256: Random baseline (256-dimensional, fixed seed=42)
-    5. BigCarp + ESM: Concatenated BigCarp and ESM mean-pooled embeddings
-    6. BigCarp + Stachelhaus: Concatenated BigCarp and Stachelhaus mean-pooled embeddings
+    5. bigcarp + ESM: Concatenated bigcarp and ESM mean-pooled embeddings
+    6. bigcarp + Stachelhaus: Concatenated bigcarp and Stachelhaus mean-pooled embeddings
 
 Output:
     - Accuracy, F1-score, and AUC-ROC with 95% confidence intervals
@@ -123,9 +123,9 @@ class AdomainPropertiesPredictor:
         Creates multiple embedding variants:
         - esm_mean: Mean-pooled ESM2 embeddings
         - stachel_mean: Mean-pooled Stachelhaus code embeddings
-        - bigcarp: BigCarp embeddings (as-is)
-        - bigcarp_esm: Concatenation of BigCarp and ESM mean
-        - bigcarp_stachel: Concatenation of BigCarp and Stachelhaus mean
+        - bigcarp: bigcarp embeddings (as-is)
+        - bigcarp_esm: Concatenation of bigcarp and ESM mean
+        - bigcarp_stachel: Concatenation of bigcarp and Stachelhaus mean
         - random_256: Random baseline (256-dimensional, seed=42)
 
         Returns:
@@ -141,7 +141,7 @@ class AdomainPropertiesPredictor:
         stachel_mean = np.array([emb.mean(axis=0) for emb in self.df['stachel_embeddings']])
         embeddings['stachel_mean'] = stachel_mean
 
-        # BigCarp
+        # bigcarp
         bigcarp = np.array([emb for emb in self.df['bigcarp_embedding']])
         embeddings['bigcarp'] = bigcarp
 

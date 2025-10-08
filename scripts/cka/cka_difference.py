@@ -1,5 +1,5 @@
 """
-CKA Difference Heatmap Analysis for BigCARP Models
+CKA Difference Heatmap Analysis for bigcarp Models
 ===================================================
 
 This script analyzes internal layer coordination differences between ESM-initialized
@@ -24,7 +24,7 @@ Model Types:
     - Random-initialized: ByteNetLM with random weight initialization
 
 Metrics:
-    - CKA similarity matrices (n_layers × n_layers)
+    - CKA similarity matrices (n_layers * n_layers)
     - Difference statistics (mean, std, min, max, Frobenius norm)
 
 Usage:
@@ -88,7 +88,7 @@ def get_parser():
     Returns:
         argparse.ArgumentParser: Configured parser with all required and optional arguments
     """
-    parser = argparse.ArgumentParser(description='CKA difference heatmap analysis of BIGCARP models')
+    parser = argparse.ArgumentParser(description='CKA difference heatmap analysis of bigcarp models')
     
     # Paths to specific checkpoints
     parser.add_argument('--pretrained_checkpoint', type=str, required=True,

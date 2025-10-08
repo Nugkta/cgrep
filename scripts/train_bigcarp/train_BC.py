@@ -135,7 +135,7 @@ def get_parser():
 
     # Required / key arguments
     parser.add_argument('--out_fpath', type=str, required=False,
-                        default='outputs/BIGCARP_output/',
+                        default='outputs/bigcarp_output/',
                         help='Output path for model checkpoints and metrics.')
     parser.add_argument('--gpu', type=int, default=0, help='GPU index to use for training.')
     parser.add_argument('--restart', action='store_true',

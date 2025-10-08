@@ -1,5 +1,5 @@
 """
-CKA Evolution Analysis for BigCARP Models
+CKA Evolution Analysis for bigcarp Models
 ==========================================
 
 This script analyzes how neural network representations evolve during training by
@@ -14,8 +14,8 @@ Analysis Strategy:
     - Random embedder vs Random last layer (baseline evolution)
 
 Model Types:
-    - ESM-initialized: Bigcarp with pretrained ESM embeddings initialized (optionally frozen)
-    - Random-initialized: Bigcarp with random initialization
+    - ESM-initialized: bigcarp with pretrained ESM embeddings initialized (optionally frozen)
+    - Random-initialized: bigcarp with random initialization
 
 Metrics:
     - Linear CKA similarity (0-1 scale, 1 = identical representations)
@@ -81,7 +81,7 @@ def get_parser():
     Returns:
         argparse.ArgumentParser: Configured parser with all required and optional arguments
     """
-    parser = argparse.ArgumentParser(description='CKA evolution analysis of BIGCARP models')
+    parser = argparse.ArgumentParser(description='CKA evolution analysis of bigcarp models')
     
     # Paths to checkpoint directories
     parser.add_argument('--pretrained_dir', type=str, required=True,
@@ -155,7 +155,7 @@ def linear_CKA(X, Y):
 
 def load_model(checkpoint_path, n_tokens, mask_idx, domains, is_frozen, args):
     """
-    Load a Bigcarp model from checkpoint file.
+    Load a bigcarp model from checkpoint file.
 
     Args:
         checkpoint_path (str): Path to checkpoint .tar file

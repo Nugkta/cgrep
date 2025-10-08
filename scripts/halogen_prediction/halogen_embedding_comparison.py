@@ -11,7 +11,7 @@ Dataset:
     halogenated final products. The dataset includes:
         - BGC sequences with halogenase domains
         - Binary labels indicating halogen presence in final products
-        - Multiple embedding types (ESM-2, BigCarp domain, BigCarp mean-pooled)
+        - Multiple embedding types (ESM-2, bigcarp domain, bigcarp mean-pooled)
 
 Methodology:
     - Leave-One-Out Cross-Validation (LOOCV) for unbiased AUC-ROC estimation
@@ -20,16 +20,16 @@ Methodology:
     - MLP architecture (512, 128 hidden units) for classification
 
 Embeddings Evaluated:
-    1. BigCarp Domain: Domain-level BigCarp embeddings
-    2. BigCarp Mean Pool: Mean-pooled BigCarp embeddings across sequence
+    1. bigcarp Domain: Domain-level bigcarp embeddings
+    2. bigcarp Mean Pool: Mean-pooled bigcarp embeddings across sequence
     3. ESM: ESM-2 protein language model embeddings
-    4. ESM + BigCarp Domain: Concatenated ESM and BigCarp domain embeddings
-    5. ESM + BigCarp Mean Pool: Concatenated ESM and BigCarp mean-pooled embeddings
-    6. ESM + BigCarp Domain + Mean Pool: All three embeddings concatenated
+    4. ESM + bigcarp Domain: Concatenated ESM and bigcarp domain embeddings
+    5. ESM + bigcarp Mean Pool: Concatenated ESM and bigcarp mean-pooled embeddings
+    6. ESM + bigcarp Domain + Mean Pool: All three embeddings concatenated
 
 Output:
     - AUC-ROC scores with 95% bootstrap confidence intervals
-    - Paired statistical comparison of AUC-ROC (ESM vs. ESM+BigCarp MeanPool)
+    - Paired statistical comparison of AUC-ROC (ESM vs. ESM+bigcarp MeanPool)
     - Comprehensive visualization plots
     - CSV results table and JSON statistical summaries
 
@@ -80,8 +80,8 @@ def load_final_dataset(path: str) -> pd.DataFrame:
     Returns:
         DataFrame with the following required columns:
             - esm_domain_embedding: ESM-2 protein language model domain embeddings (numpy arrays)
-            - bigcarp_domain_embedding: BigCarp domain-level embeddings of BGC sequences (numpy arrays)
-            - bigcarp_embedding_mean_pool: Mean-pooled BigCarp embeddings across BGC sequences (numpy arrays)
+            - bigcarp_domain_embedding: bigcarp domain-level embeddings of BGC sequences (numpy arrays)
+            - bigcarp_embedding_mean_pool: Mean-pooled bigcarp embeddings across BGC sequences (numpy arrays)
             - has_halogen: Binary labels (0/1 or bool) indicating whether the BGC produces
                           a halogenated final product (True/1) or not (False/0)
 
@@ -463,7 +463,7 @@ def create_visualization(results_df: pd.DataFrame, paired_results: Dict, output_
             - Panel 2 (right): Histogram of paired bootstrap differences
 
     Note:
-        - Color coding: ESM+ (red), ESM (blue), BigCarp only (green)
+        - Color coding: ESM+ (red), ESM (blue), bigcarp only (green)
         - Figure saved at 300 DPI for publication quality
         - Also calls plt.show() to display interactively
     """
@@ -513,9 +513,9 @@ def create_visualization(results_df: pd.DataFrame, paired_results: Dict, output_
     ax2.axvline(paired_results['bootstrap_ci_upper'], color='orange', linestyle=':', linewidth=2,
                label=f'95% CI [{paired_results["bootstrap_ci_lower"]:.4f}, {paired_results["bootstrap_ci_upper"]:.4f}]')
 
-    ax2.set_xlabel('AUC Difference (ESM+BigCarp MeanPool - ESM)')
+    ax2.set_xlabel('AUC Difference (ESM+bigcarp MeanPool - ESM)')
     ax2.set_ylabel('Density')
-    ax2.set_title('Paired Bootstrap Difference Distribution\nESM vs ESM+BigCarp MeanPool')
+    ax2.set_title('Paired Bootstrap Difference Distribution\nESM vs ESM+bigcarp MeanPool')
     ax2.legend()
     ax2.grid(axis='y', alpha=0.3)
 
@@ -543,7 +543,7 @@ def main():
     Main orchestration function that:
         1. Loads dataset and extracts embeddings
         2. Evaluates 6 embedding configurations using LOOCV + bootstrap
-        3. Performs paired statistical comparison (ESM vs ESM+BigCarp MeanPool)
+        3. Performs paired statistical comparison (ESM vs ESM+bigcarp MeanPool)
         4. Generates comprehensive visualizations
         5. Saves results to CSV, JSON, and pickle files
 
@@ -563,7 +563,7 @@ def main():
         - Progress updates for each pipeline stage
         - Summary table of all results
         - Top 5 performing embeddings
-        - Statistical comparison between ESM and ESM+BigCarp MeanPool
+        - Statistical comparison between ESM and ESM+bigcarp MeanPool
     """
     DATASET_PATH = os.getenv('DATASET_PATH', 'data/processed/halogen_prediction/halogen_pf04820_final_dataset.pkl')
     N_BOOTSTRAP = int(os.getenv('N_BOOTSTRAP_SAMPLES', '10000'))
@@ -586,16 +586,16 @@ def main():
 
     print(f'\n   Embedding dimensions:')
     print(f'     ESM: {esm_emb.shape}')
-    print(f'     BigCarp domain: {bc_domain_emb.shape}')
-    print(f'     BigCarp mean pool: {bc_mean_emb.shape}')
+    print(f'     bigcarp domain: {bc_domain_emb.shape}')
+    print(f'     bigcarp mean pool: {bc_mean_emb.shape}')
 
     embedding_configs = [
-        ("BigCarp_Domain", bc_domain_emb),
-        ("BigCarp_MeanPool", bc_mean_emb),
+        ("bigcarp_Domain", bc_domain_emb),
+        ("bigcarp_MeanPool", bc_mean_emb),
         ("ESM", esm_emb),
-        ("ESM+BigCarp_Domain", np.concatenate([esm_emb, bc_domain_emb], axis=1)),
-        ("ESM+BigCarp_MeanPool", np.concatenate([esm_emb, bc_mean_emb], axis=1)),
-        ("ESM+BigCarp_Domain+MeanPool", np.concatenate([esm_emb, bc_domain_emb, bc_mean_emb], axis=1)),
+        ("ESM+bigcarp_Domain", np.concatenate([esm_emb, bc_domain_emb], axis=1)),
+        ("ESM+bigcarp_MeanPool", np.concatenate([esm_emb, bc_mean_emb], axis=1)),
+        ("ESM+bigcarp_Domain+MeanPool", np.concatenate([esm_emb, bc_domain_emb, bc_mean_emb], axis=1)),
     ]
 
     print(f"\n2. Evaluating {len(embedding_configs)} embedding configurations with MLPs...")
@@ -641,12 +641,12 @@ def main():
         print(f"{idx+1:2}. {row['embedding_name']:35} | AUC: {row['bootstrap_mean_auc']:.4f} "
               f"[{row['bootstrap_ci_lower']:.4f}, {row['bootstrap_ci_upper']:.4f}]")
 
-    # Paired Bootstrap Analysis: ESM vs ESM+BigCarp_MeanPool
-    print(f"\n4. Paired Bootstrap Analysis: ESM vs ESM+BigCarp_MeanPool")
+    # Paired Bootstrap Analysis: ESM vs ESM+bigcarp_MeanPool
+    print(f"\n4. Paired Bootstrap Analysis: ESM vs ESM+bigcarp_MeanPool")
     print("="*80)
 
     esm_data = evaluation_data['ESM']
-    esm_bc_mean_data = evaluation_data['ESM+BigCarp_MeanPool']
+    esm_bc_mean_data = evaluation_data['ESM+bigcarp_MeanPool']
 
     paired_results = paired_bootstrap_test(
         esm_data['true_labels'],
@@ -656,10 +656,10 @@ def main():
     )
 
     esm_results = results_df[results_df['embedding_name']=='ESM'].iloc[0]
-    concat_results = results_df[results_df['embedding_name']=='ESM+BigCarp_MeanPool'].iloc[0]
+    concat_results = results_df[results_df['embedding_name']=='ESM+bigcarp_MeanPool'].iloc[0]
 
     print(f"   ESM AUC-ROC:                {esm_results['bootstrap_mean_auc']:.4f} [{esm_results['bootstrap_ci_lower']:.4f}, {esm_results['bootstrap_ci_upper']:.4f}]")
-    print(f"   ESM+BigCarp MeanPool AUC:   {concat_results['bootstrap_mean_auc']:.4f} [{concat_results['bootstrap_ci_lower']:.4f}, {concat_results['bootstrap_ci_upper']:.4f}]")
+    print(f"   ESM+bigcarp MeanPool AUC:   {concat_results['bootstrap_mean_auc']:.4f} [{concat_results['bootstrap_ci_lower']:.4f}, {concat_results['bootstrap_ci_upper']:.4f}]")
     print(f"   Difference (ESM+BC - ESM):  {paired_results['original_diff']:+.4f} [{paired_results['bootstrap_ci_lower']:+.4f}, {paired_results['bootstrap_ci_upper']:+.4f}]")
     print(f"   P-value:                    {paired_results['p_value_two_sided']:.4f} ({'significant' if paired_results['p_value_two_sided'] < 0.05 else 'not significant'})")
 

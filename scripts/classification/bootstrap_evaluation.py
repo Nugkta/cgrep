@@ -29,9 +29,9 @@ Methodology:
 Models Evaluated:
     The script evaluates multiple embedding approaches trained on the same classification task:
         - ESM-2 embeddings: Protein language model representations
-        - BigCarp embeddings: Domain-specific functional embeddings
+        - bigcarp embeddings: Domain-specific functional embeddings
         - Stachelhaus code: NRPS A-domain substrate binding code
-        - Concatenated embeddings: Combined representations (ESM + BigCarp, etc.)
+        - Concatenated embeddings: Combined representations (ESM + bigcarp, etc.)
         - Baseline models: Random or traditional feature-based methods
 
     All models are evaluated on identical data splits for fair comparison.
