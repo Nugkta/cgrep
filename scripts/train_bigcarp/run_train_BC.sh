@@ -37,7 +37,6 @@ COMMAND="python scripts/train_bigcarp/train_BC.py \
   --fcorpus data/processed/bgc_corpus/antidb_pfam_corpus.csv \
   --fvocab data/processed/vocabularies/pfam_vocab_present.json \
   --fdata None \
-  --unconditional \
   --epochs 200 \
   --batch_size 512 \
   --esm_emb_fpath artifacts/bigcarp/esm_embeddings/esm1b_pfam_embs_present.pt \

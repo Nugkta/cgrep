@@ -680,97 +680,54 @@ def mlm_collate_fn_extraction(batch, mask_idx, padding_idx, mask_frac=0.15): # !
 
 def extract_layer_embeddings(model, src, input_mask=None, layer_indices=None, layer_weights=None):
     """
-    Extract embeddings from specific layers of the model.
-    
+    Extract embeddings from the model.
+
     Args:
-        model: The neural network model
+        model: The neural network model (ByteNetLM)
         src: Input token IDs (shape: [batch_size, seq_len])
         input_mask: Attention mask (shape: [batch_size, seq_len, 1])
-        layer_indices: List of layer indices to extract embeddings from
-                       (None means only final layer) or "embedder" for embedding layer only
-        layer_weights: List of weights for each layer (None means equal weighting)
-    
+        layer_indices: Either ["embedder"] for raw embedding layer or ["last"] for final contextualized layer
+                       If None, defaults to ["last"]
+        layer_weights: Not used (kept for backward compatibility)
+
     Returns:
-        Combined embeddings from specified layers (shape: [batch_size, seq_len, hidden_dim])
+        Embeddings from specified layer (shape: [batch_size, seq_len, hidden_dim])
     """
-    # Special case: extract only from embedding layer
+    # Special case: extract only from embedding layer (raw, non-contextualized)
     if layer_indices == ["embedder"]:
         hidden = model.embedder.embedder(src)
-        # print("Using the embedding layer only")
         return hidden
-    if layer_indices == ["last"]:
-        hidden = model.embedder(src, input_mask=input_mask)
-        return model.last_norm(hidden)
-    
-    # Default to using just the final layer if no indices provided
-    if layer_indices == None:
-        hidden = model.embedder(src, input_mask=input_mask)
-        return model.last_norm(hidden) 
 
-    # Default to equal weighting if not specified
-    if layer_weights is None:
-        layer_weights = [1.0 / len(layer_indices)] * len(layer_indices)
-    else:
-        total = sum(layer_weights)
-        layer_weights = [w / total for w in layer_weights]
-    
-    # Use the return_all_hidden_states parameter in ByteNet's forward method
-    _, all_hidden_states = model.embedder(src, input_mask=input_mask, return_all_hidden_states=True)
-    
-    # Combine hidden states according to specified indices and weights
-    combined_hidden = None
-    for idx, weight in zip(layer_indices, layer_weights):
-        # Special case: embedding layer within a list of indices
-        if idx == "embedder":
-            layer_output = model.embedder.embedder(src)
-            print(f"Including embedding layer with weight {weight}")
-        else:
-            # Ensure idx is within valid range
-            if idx < 0:
-                idx = len(all_hidden_states) + idx
-            if idx < 0 or idx >= len(all_hidden_states):
-                raise ValueError(f"Layer index {idx} out of bounds (0 to {len(all_hidden_states)-1})")
-            
-            layer_output = all_hidden_states[idx]
-        
-        # Add to combined output with proper weight
-        if combined_hidden is None:
-            combined_hidden = weight * layer_output
-        else:
-            combined_hidden += weight * layer_output
-
-    # Apply final normalization if available
-    if hasattr(model, 'last_norm'):
-        combined_hidden = model.last_norm(combined_hidden)
-
-    return combined_hidden
+    # Default case: extract from last layer (fully contextualized)
+    # This handles both layer_indices == ["last"] and layer_indices == None
+    hidden = model.embedder(src, input_mask=input_mask)
+    return model.last_norm(hidden)
 
 
-def generate_average_embeddings(model, dl, n_tokens, MIN_SPECIAL_ID, padding_idx, mask_idx, 
+def generate_average_embeddings(model, dl, n_tokens, MIN_SPECIAL_ID, padding_idx, mask_idx,
                                layer_indices=None, layer_weights=None, device=None):
     """
-    Generate average embeddings for tokens by extracting from multiple layers of the model.
-    
+    Generate average embeddings for tokens by extracting from the model.
+
     Args:
-        model: The neural network model
-        dl: DataLoader with input data
-        n_tokens: Number of tokens in vocabulary
-        MIN_SPECIAL_ID: Minimum ID for tokens to include
-        padding_idx: ID of padding token to ignore
-        mask_idx: ID of mask token
-        layer_indices: List of layer indices to extract embeddings from
-                       Examples: [4, 8, 12] for middle layers, [-1] for final layer
-        layer_weights: List of weights for each layer 
-                       Example: [0.3, 0.4, 0.3] for equal contribution from layers 4, 8, 12
-    
+        model: The neural network model (ByteNetLM)
+        dl: DataLoader with input data (from mlm_collate_fn_extraction)
+        n_tokens: Total number of tokens in vocabulary
+        MIN_SPECIAL_ID: Minimum token ID to include in extraction (typically 4, to skip special tokens)
+        padding_idx: Token ID of padding token to ignore
+        mask_idx: Token ID of mask token (used to create input_mask)
+        layer_indices: Either ["embedder"] for embedder-layer embeddings or ["last"] for last-layer
+                       If None, defaults to ["last"]
+        layer_weights: Not used (kept for backward compatibility)
+        device: Device to run model on. If None, uses model's current device
+]
     Returns:
-        Dictionary mapping token IDs to their average embeddings
+        Dictionary mapping token IDs to their average embeddings (torch.Tensor)
     """
     from collections import defaultdict
     embedding_sums = defaultdict(lambda: None)
     embedding_counts = defaultdict(int)
     
-    # If device is specified, use it; otherwise infer from model
     if device is None:
         device = next(model.parameters()).device
 
@@ -781,8 +738,6 @@ def generate_average_embeddings(model, dl, n_tokens, MIN_SPECIAL_ID, padding_idx
             src = src.to(device)
             mask = mask.to(device)
             input_mask = (src != mask_idx).float().unsqueeze(-1)
-            # input_mask = (src != mask_idx).float().unsqueeze(-1)
-            # Use our new function to extract embeddings from specified layers
             hidden = extract_layer_embeddings(
                 model, src, input_mask, layer_indices, layer_weights
             )

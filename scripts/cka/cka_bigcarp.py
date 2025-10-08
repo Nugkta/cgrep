@@ -1,12 +1,12 @@
 """
-CKA Analysis for BigCARP Models
+CKA Analysis for bigcarp Models
 
 This script performs Centered Kernel Alignment (CKA) analysis to compare the internal representations
-of two BigCARP (ByteNet Language Model) checkpoints. CKA is a method for measuring the similarity
+of two bigcarp (ByteNet Language Model) checkpoints. CKA is a method for measuring the similarity
 between neural network representations across different layers.
 
 The script:
-1. Loads two BigCARP model checkpoints from specified paths
+1. Loads two bigcarp model checkpoints from specified paths
 2. Extracts intermediate layer representations from both models on the same input data
 3. Computes CKA similarity matrices between corresponding layers of the two models
 4. Generates visualizations including:
@@ -45,7 +45,7 @@ from datetime import datetime
 from sequence_models.convolutional import ByteNetLM
 from sequence_models.collaters import _pad
 
-# Import shared BigCARP functions from the cgrep package
+# Import shared bigcarp functions from the cgrep package
 from cgrep.bigcarp_functions import load_data, ListDataset, mlm_collate_fn, prepare_dataloaders
 
 # Publication-quality plotting setup
@@ -74,7 +74,7 @@ plt.rcParams.update({
 })
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='CKA analysis of BIGCARP models')
+    parser = argparse.ArgumentParser(description='CKA analysis of bigcarp models')
     
     # Paths to model checkpoints
     parser.add_argument('--model1_path', type=str, required=True, 

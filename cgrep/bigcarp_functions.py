@@ -1,5 +1,5 @@
 """
-Shared functions for BigCARP model training and analysis.
+Shared functions for BiGCARP model training and analysis.
 
 This module contains functions extracted from the training scripts that are commonly
 used across different analysis scripts.
