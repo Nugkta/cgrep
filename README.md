@@ -1,8 +1,19 @@
 # cgrep: Cross-Granularity Representation Learning for Biosynthetic Gene Clusters
 
-cgrep implements the experimental codebase behind our cross-granularity representation learning work on biosynthetic gene clusters (BGCs). The repository centers on **BiGCARP**, a ByteNet-based masked language model trained on Pfam domain sequences, and a suite of downstream evaluations covering product class classification, substrate-property prediction, halogenation prediction, and representation analyses (CKA, UMAP). For methodological background, see the accompanying manuscript in `cgrep_paper.pdf`.
+## Overview
+cgrep implements the experimental codebase for investigating **cross-granularity integration** in biological foundation models through a case study of biosynthetic gene clusters (BGCs). Unlike natural language, biological sequences exhibit hierarchical granularity (nucleotides → amino acids → protein domains → genes) where each level encodes distinct functional information. This repository explores how knowledge from models operating at different granularities can be combined to improve both performance and interpretability.
+
+The repository centers on **BiGCARP**, a ByteNet-based masked language model trained at the Pfam domain level on ~127,000 BGCs from the antiSMASH database, and investigates its integration with **ESM**, a state-of-the-art amino acid-level protein language model trained on billions of sequences. Through representation analysis (CKA, UMAP) and a suite of probe tasks (product classification, A-domain substrate prediction, halogenation detection), we demonstrate that:
+
+1. **Fine-grained (ESM) and coarse-grained (BiGCARP) models capture complementary biological knowledge** — ESM encodes local sequence patterns while BiGCARP captures long-range dependencies across entire BGCs.
+2. **Cross-granularity integration improves performance** — combining representations from both models yields measurable gains in intermediate-level prediction tasks.
+3. **Deeper-layer embeddings are more faithful** — last-layer representations better capture a model's learned knowledge compared to initial embedding layers, explaining why straightforward embedding initialization strategies may fail.
+
+For detailed methodology and experimental results, see the accompanying manuscript in `cgrep_paper.pdf`.
 
 ## Repository Layout
+The `scripts/` directory contains the most important scripts for running the probe tasks (product classification, A-domain substrate prediction, halogenation detection) and representation analyses (CKA, UMAP).
+
 | Path | Description |
 | --- | --- |
 | `cgrep/` | Core Python package with shared data utilities (`utils.py`), BiGCARP data loaders (`bigcarp_functions.py`), and helper models for downstream tasks (`models_multiclass.py`). |
