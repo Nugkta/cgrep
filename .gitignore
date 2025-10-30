@@ -168,6 +168,7 @@ results/mibig3_bootstrap_evaluation/
 !results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv
 external/protein-sequence-models
 results/bgc_classification/**
+results/subcluster_generation/
 
 # Fine-tuning experiments
 scripts/classification/fine_tuning/

@@ -87,42 +87,73 @@ def load_vocab_info(vocab_path):
     
     return vocab_info, specials, domains, padding_idx, mask_idx, n_tokens
 
-def load_corpus_data(corpus_path, specials, domains, mask_idx, padding_idx, conditional=False):
+def load_corpus_data(corpus_path, specials, domains, mask_idx, padding_idx, conditional=False, subcluster=False):
     """Load and preprocess corpus data into a DataLoader.
 
     Args:
         corpus_path (str): Path to corpus CSV file with columns ['domains', 'function', 'split']
+                           or subcluster format (first column BGC ID, remaining columns domains)
         specials (dict): Mapping of special token names to IDs
         domains (dict): Mapping of domain names to IDs
         mask_idx (int): Token ID for masking
         padding_idx (int): Token ID for padding
         conditional (bool): If True, prepend functional token at the start of sequences (default: False)
+        subcluster (bool): If True, read corpus in subcluster format (default: False)
 
     Returns:
         DataLoader: PyTorch DataLoader with batched and tokenized sequences (batch_size=256)
     """
-    df = pd.read_csv(corpus_path).fillna("")
     tokens_list = []
 
-    for _, row in df.iterrows():
-        if conditional:
-            # Include functional token at the start
-            func_token = row["function"]
-            func_id = specials.get(func_token, specials["*"])
-            sequence_ids = [func_id]
-        else:
-            # Unconditional: start with empty sequence
-            sequence_ids = []
+    if subcluster:
+        # Subcluster format: first column is BGC ID, remaining columns are subcluster domains
+        # Read line-by-line to handle variable number of columns
+        with open(corpus_path, 'r') as f:
+            for line in f:
+                # Split by comma to get all fields
+                fields = line.strip().split(',')
+                if len(fields) < 2:  # Skip lines with only BGC ID or empty lines
+                    continue
 
-        for d in row["domains"].split(";"):
-            d = d.strip()
-            sequence_ids.append(domains.get(d, domains["UNK"]))
-        tokens_list.append(torch.tensor(sequence_ids))
+                # Skip first field (BGC ID), remaining fields are domains
+                sequence_ids = []
+                for domain_val in fields[1:]:
+                    # Skip empty/NaN values (represented as '-' or empty)
+                    if not domain_val or domain_val == '-':
+                        continue
+
+                    # Handle semicolon-separated domains within a cell
+                    for d in domain_val.split(';'):
+                        d = d.strip()
+                        if d and d != '-':
+                            sequence_ids.append(domains.get(d, domains["UNK"]))
+
+                if len(sequence_ids) > 0:  # Only add sequences with at least one domain
+                    tokens_list.append(torch.tensor(sequence_ids))
+
+    else:
+        # Original format: columns ['domains', 'function', 'split']
+        df = pd.read_csv(corpus_path).fillna("")
+
+        for _, row in df.iterrows():
+            if conditional:
+                # Include functional token at the start
+                func_token = row["function"]
+                func_id = specials.get(func_token, specials["*"])
+                sequence_ids = [func_id]
+            else:
+                # Unconditional: start with empty sequence
+                sequence_ids = []
+
+            for d in row["domains"].split(";"):
+                d = d.strip()
+                sequence_ids.append(domains.get(d, domains["UNK"]))
+            tokens_list.append(torch.tensor(sequence_ids))
 
     ds = utils.ListDataset_extraction(tokens_list)
     dl = DataLoader(ds, batch_size=256, shuffle=False,
                     collate_fn=lambda b: utils.mlm_collate_fn_extraction(b, mask_idx, padding_idx, mask_frac=0))
-    
+
     return dl
 
 def create_model(n_tokens, mask_idx, n_frozen_embs, device):
@@ -230,8 +261,8 @@ def process_single_checkpoint(args):
 
     # Load corpus data
     dataloader = load_corpus_data(args.corpus_path, specials, domains, mask_idx, padding_idx,
-                                   conditional=args.conditional)
-    
+                                   conditional=args.conditional, subcluster=args.subcluster)
+
     # Create model
     model = create_model(n_tokens, mask_idx, n_frozen_embs, device)
     
@@ -288,8 +319,8 @@ def process_bulk_checkpoints(args):
 
     # Load corpus data
     dataloader = load_corpus_data(args.corpus_path, specials, domains, mask_idx, padding_idx,
-                                   conditional=args.conditional)
-    
+                                   conditional=args.conditional, subcluster=args.subcluster)
+
     # Create model
     model = create_model(n_tokens, mask_idx, n_frozen_embs, device)
     
@@ -340,6 +371,7 @@ def parse_arguments():
     common_parser.add_argument("--layer-indices", nargs="+", default=["last"], help="Layer indices to extract (separate file per layer)")
     common_parser.add_argument("--frozen-embeddings", action="store_true", help="Use frozen embeddings")
     common_parser.add_argument("--conditional", action="store_true", help="Include functional token at the start of sequences")
+    common_parser.add_argument("--subcluster", action="store_true", help="Read corpus in subcluster format: first column is BGC ID, remaining columns are subcluster domains")
     
     # Single checkpoint mode
     single_parser = subparsers.add_parser("single", parents=[common_parser], help="Process a single checkpoint")

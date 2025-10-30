@@ -168,8 +168,10 @@ def get_parser():
                         help='If set, use autoregressive model (causal).')
     parser.add_argument('--cp_fpath', type=str, default=None,
                         help='Path to the checkpoint to load for training.')
-    
-    
+    parser.add_argument('--subpfam', action='store_true',
+                        help='If set, read corpus in subpfam format: first column is BGC ID, remaining columns are subpfam domains.')
+
+
     return parser
 
 
@@ -216,8 +218,6 @@ def load_data(args):
         - Unconditional mode: sequences contain only domain tokens
         - Train/test split determined by 'split' column in CSV
     """
-    # Read CSV
-    df = pd.read_csv(args.fcorpus)
     # Load token definitions
     vocab_info = json.load(open(args.fvocab))
     specials = vocab_info['specials']
@@ -227,27 +227,79 @@ def load_data(args):
     padding_idx = specials['-']
     mask_idx = specials['#']
 
-    # Prepare the token sequences
-    tokens_list = []
-    for _, row in df.iterrows():
-        if args.conditional:
-            # Prepend the function token if conditional
-            t = [specials[row['function']]]
-        else:
-            # Unconditional: start with empty sequence
-            t = []
+    # Read CSV based on format
+    if args.subpfam:
+        # Subpfam format: first column is BGC ID, remaining columns are subpfam domains
+        # Read line-by-line to handle variable number of columns
+        tokens_list = []
+        bgc_ids = []
 
-        for d in row['domains'].split(';'):
-            if d in domains:
-                t.append(domains[d])
+        with open(args.fcorpus, 'r') as f:
+            for line in f:
+                # Split by comma to get all fields
+                fields = line.strip().split(',')
+                if len(fields) < 2:  # Skip lines with only BGC ID or empty lines
+                    continue
+
+                # First field is BGC ID
+                bgc_ids.append(fields[0])
+
+                # Remaining fields are domains
+                t = []
+                for domain_val in fields[1:]:
+                    # Skip empty/NaN values (represented as '-' or empty)
+                    if not domain_val or domain_val == '-':
+                        continue
+
+                    # Handle semicolon-separated domains within a cell
+                    for d in domain_val.split(';'):
+                        d = d.strip()
+                        if d and d != '-':
+                            if d in domains:
+                                t.append(domains[d])
+                            else:
+                                # Use 'UNK' domain if the domain token is not found
+                                t.append(domains['UNK'])
+
+                if len(t) > 0:  # Only add sequences with at least one domain
+                    tokens_list.append(torch.tensor(t))
+                else:
+                    # Remove the bgc_id if we didn't get any tokens
+                    bgc_ids.pop()
+
+        # Create a simple DataFrame for compatibility
+        df = pd.DataFrame({'bgc_id': bgc_ids})
+
+        # Split data: 80% train, 20% test
+        n_train = int(0.8 * len(tokens_list))
+        train_tokens = tokens_list[:n_train]
+        test_tokens = tokens_list[n_train:]
+
+    else:
+        # Original format: columns [domains, function, split]
+        df = pd.read_csv(args.fcorpus)
+
+        # Prepare the token sequences
+        tokens_list = []
+        for _, row in df.iterrows():
+            if args.conditional:
+                # Prepend the function token if conditional
+                t = [specials[row['function']]]
             else:
-                # Use 'UNK' domain if the domain token is not found
-                t.append(domains['UNK'])
-        tokens_list.append(torch.tensor(t))
+                # Unconditional: start with empty sequence
+                t = []
 
-    # Split the data into train, test (the split is already done in the csv file)
-    train_tokens = [tokens_list[i] for i in df[df['split'] == 'train'].index]
-    test_tokens  = [tokens_list[i] for i in df[df['split'] == 'test'].index]
+            for d in row['domains'].split(';'):
+                if d in domains:
+                    t.append(domains[d])
+                else:
+                    # Use 'UNK' domain if the domain token is not found
+                    t.append(domains['UNK'])
+            tokens_list.append(torch.tensor(t))
+
+        # Split the data into train, test (the split is already done in the csv file)
+        train_tokens = [tokens_list[i] for i in df[df['split'] == 'train'].index]
+        test_tokens  = [tokens_list[i] for i in df[df['split'] == 'test'].index]
 
     data_fpath = args.fdata
 

@@ -732,7 +732,7 @@ def generate_average_embeddings(model, dl, n_tokens, MIN_SPECIAL_ID, padding_idx
         device = next(model.parameters()).device
 
     with torch.no_grad():
-        for src, mask in tqdm(dl, desc="Processing Batches", total=len(dl), 
+        for src, mask in tqdm(dl, desc="Processing Batches", total=len(dl),
                              leave=False, position=1, ncols=80, mininterval=1.0):
             # Move data to device
             src = src.to(device)

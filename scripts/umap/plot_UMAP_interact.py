@@ -114,6 +114,7 @@ def parse_args():
     parser.add_argument('--product_class_file', help='JSON file with product class mappings')
     parser.add_argument('--function_labels_csv', help='CSV with function labels')
     parser.add_argument('--no_interactive', action='store_true', help='Skip HTML plots')
+    parser.add_argument('--subcluster', action='store_true', help='Use subcluster vocabulary format (domains_array instead of domains dict)')
 
     args = parser.parse_args()
     
@@ -169,7 +170,15 @@ def load_metadata(args):
     # Load vocabulary
     with open(args.vocab_file) as f:
         vocab = json.load(f)
-    domains = list(vocab['domains'].keys())
+
+    # Handle different vocabulary formats
+    if args.subcluster:
+        # Subcluster format: domains_array is a list where index = token_id, value = domain_name
+        # Need to skip first 4 entries (special tokens: -, *, #, UNK typically)
+        domains = vocab['domains_array']
+    else:
+        # Standard format: domains is a dict {domain_name: token_id}
+        domains = list(vocab['domains'].keys())
     
     # Load clans
     clans_df = pd.read_csv(args.clans_file)
