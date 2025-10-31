@@ -186,27 +186,46 @@ class Encoder_SentenceTransformer_precomputed(nn.Module):
 def calc_beta(mus, L_lower, log_diag, embeddings, config, eps=1e-6):
   """
   take parameters of topic-specific normal distributions of shape (n_topics, embedding_dim), i.e. mus and L_lower
-  and return probability of each word embedding among the embeddings. 
-  L_lower is a (n_embedding_dim, n_embedding_dim) matrix, but only the part below the diagonal is used 
+  and return probability of each word embedding among the embeddings.
+  L_lower is a (n_embedding_dim, n_embedding_dim) matrix, but only the part below the diagonal is used
 
-  Return log-probabilities of each embedding under each normal distribution 
+  Return log-probabilities of each embedding under each normal distribution
   """
 
-  # Add a small epsilon to ensure positive diagonal values
-  diag = torch.exp(log_diag) + eps
+  # Get device from mus
+  device = mus.device
 
-  log_probs = torch.zeros(config.n_topics, config.vocab_size)
+  # Add a small epsilon to ensure positive diagonal values
+  diag = torch.exp(log_diag.clamp(min=-10, max=10)) + eps  # Clamp to prevent overflow/underflow
+
+  # Create log_probs on the same device as mus
+  log_probs = torch.zeros(config.n_topics, config.vocab_size, device=device, dtype=mus.dtype)
 
   for i, (mu, lower, D) in enumerate(zip(mus, L_lower, diag)):
+    # Check for NaN or Inf in parameters
+    if torch.isnan(mu).any() or torch.isinf(mu).any():
+      print(f"Warning: NaN or Inf detected in mu for topic {i}, using uniform distribution")
+      log_probs[i] = torch.zeros(config.vocab_size, device=device, dtype=mus.dtype)
+      continue
+
+    if torch.isnan(D).any() or torch.isinf(D).any() or (D <= 0).any():
+      print(f"Warning: Invalid diagonal values for topic {i}, using uniform distribution")
+      log_probs[i] = torch.zeros(config.vocab_size, device=device, dtype=mus.dtype)
+      continue
+
     try:
       dist = LowRankMultivariateNormal(mu, cov_factor=lower, cov_diag=D)
       log_probs[i] = dist.log_prob(embeddings)
     except Exception as e:
       # Fall back to a simpler diagonal normal distribution if there's an issue
-      print(f"Warning: Using diagonal normal for topic {i} due to: {e}")
-      dist = Independent(Normal(mu, torch.sqrt(D)), 1)
-      log_probs[i] = dist.log_prob(embeddings)
-  
+      try:
+        std = torch.sqrt(D).clamp(min=eps)  # Ensure positive std
+        dist = Independent(Normal(mu, std), 1)
+        log_probs[i] = dist.log_prob(embeddings)
+      except Exception as e2:
+        print(f"Warning: Both distributions failed for topic {i}, using uniform: {e2}")
+        log_probs[i] = torch.zeros(config.vocab_size, device=device, dtype=mus.dtype)
+
   return log_probs
 
 
@@ -241,16 +260,24 @@ class Decoder_TNTM(nn.Module):
 
     # ProdLDA-style parameters (if hybrid mode is enabled)
     if self.use_hybrid:
+      # Get device from mus_init to ensure consistency
+      device = mus_init.device
+
       if beta_prodlda_init is None:
-        # Initialize with uniform distribution + small noise
-        beta_prodlda_init = torch.ones(config.n_topics, config.vocab_size) / config.vocab_size
-        beta_prodlda_init += torch.randn_like(beta_prodlda_init) * 0.01
+        # Initialize with uniform distribution + small noise on the correct device
+        beta_prodlda_init = torch.ones(config.n_topics, config.vocab_size, device=device) / config.vocab_size
+        beta_prodlda_init += torch.randn(config.n_topics, config.vocab_size, device=device) * 0.01
+
+      # Ensure beta_prodlda_init is positive
+      beta_prodlda_init = torch.clamp(beta_prodlda_init, min=1e-10)
 
       # Store log-space for numerical stability, will softmax in forward
-      self.log_beta_prodlda = nn.Parameter(torch.log(beta_prodlda_init + 1e-10))
+      self.log_beta_prodlda = nn.Parameter(torch.log(beta_prodlda_init))
 
       # Lambda parameter to weight the two betas (will be passed through sigmoid)
-      self.lambda_logit = nn.Parameter(torch.tensor(0.0))  # sigmoid(0) = 0.5
+      self.lambda_logit = nn.Parameter(torch.tensor(0.0, device=device))  # sigmoid(0) = 0.5
+
+      print(f"Hybrid mode enabled: beta_prodlda shape={self.log_beta_prodlda.shape}, device={self.log_beta_prodlda.device}")
 
   def forward(self, theta_hat):
     """
@@ -263,18 +290,42 @@ class Decoder_TNTM(nn.Module):
     Returns:
         log_recon: [batch, vocab_size] - log probabilities of reconstructed word distribution
     """
+    # Get device from theta_hat to ensure consistency
+    device = theta_hat.device
+
     # Calculate Gaussian-based log_beta (embedding space)
-    log_beta_gaussian = calc_beta(self.mus, self.L_lower, self.log_diag, self.embeddings, self.config).to(device)
+    log_beta_gaussian = calc_beta(self.mus, self.L_lower, self.log_diag, self.embeddings, self.config)
+
+    # Check for NaN in log_beta_gaussian
+    if torch.isnan(log_beta_gaussian).any() or torch.isinf(log_beta_gaussian).any():
+      print("WARNING: NaN/Inf in log_beta_gaussian, using uniform distribution")
+      log_beta_gaussian = torch.zeros(self.config.n_topics, self.config.vocab_size, device=device)
+
     # Convert to probabilities: softmax over vocabulary for each topic
     beta_gaussian = torch.nn.functional.softmax(log_beta_gaussian, dim=-1)  # [n_topics, vocab_size]
+
+    # Check for NaN after softmax
+    if torch.isnan(beta_gaussian).any():
+      print("WARNING: NaN in beta_gaussian after softmax, using uniform distribution")
+      beta_gaussian = torch.ones(self.config.n_topics, self.config.vocab_size, device=device) / self.config.vocab_size
 
     if self.use_hybrid:
       # Calculate ProdLDA-style beta (raw word probabilities)
       # Apply softmax to ensure proper probability distribution over vocabulary
       beta_prodlda = torch.nn.functional.softmax(self.log_beta_prodlda, dim=-1)  # [n_topics, vocab_size]
 
+      # Check for NaN
+      if torch.isnan(beta_prodlda).any():
+        print("WARNING: NaN in beta_prodlda, using uniform distribution")
+        beta_prodlda = torch.ones(self.config.n_topics, self.config.vocab_size, device=device) / self.config.vocab_size
+
       # Get lambda weight (constrained to [0, 1])
       lambda_weight = torch.sigmoid(self.lambda_logit)
+
+      # Check for NaN in lambda
+      if torch.isnan(lambda_weight):
+        print("WARNING: NaN in lambda_weight, using 0.5")
+        lambda_weight = torch.tensor(0.5, device=device)
 
       # Combine the two betas in probability space
       # β_hybrid = λ * β_gaussian + (1-λ) * β_prodlda
@@ -283,9 +334,20 @@ class Decoder_TNTM(nn.Module):
       # Use only Gaussian-based beta
       beta = beta_gaussian
 
+    # Check beta validity
+    if torch.isnan(beta).any() or torch.isinf(beta).any():
+      print("WARNING: NaN/Inf in final beta, using uniform distribution")
+      beta = torch.ones(self.config.n_topics, self.config.vocab_size, device=device) / self.config.vocab_size
+
     # ProdLDA scheme: multiply first, then softmax
     # logits = θ̂ @ β
     logits = torch.matmul(theta_hat, beta)  # [batch, n_topics] @ [n_topics, vocab_size] = [batch, vocab_size]
+
+    # Check logits
+    if torch.isnan(logits).any() or torch.isinf(logits).any():
+      print("WARNING: NaN/Inf in logits after matmul")
+      print(f"  theta_hat: min={theta_hat.min():.4f}, max={theta_hat.max():.4f}, nan={torch.isnan(theta_hat).any()}")
+      print(f"  beta: min={beta.min():.4f}, max={beta.max():.4f}, nan={torch.isnan(beta).any()}")
 
     # Apply log-softmax at the end
     log_recon = torch.nn.functional.log_softmax(logits, dim=-1)  # [batch, vocab_size]
@@ -512,15 +574,33 @@ def loss_elbo(input, log_recon, posterior_mean, posterior_logvar,
   
   
 def train_test_split(dataset, train_frac, val_frac, batch_size):
+    """
+    Split dataset into train and validation sets.
+    Note: test set is not created as it's not used in training.
+
+    Args:
+        dataset: The full dataset
+        train_frac: Fraction for training (e.g., 0.8)
+        val_frac: Fraction for validation (e.g., 0.2)
+        batch_size: Batch size for dataloaders
+
+    Returns:
+        train_loader, val_loader, None (test_loader placeholder)
+    """
     tot_len = len(dataset)
 
-    train, val, test = torch.utils.data.random_split(dataset, [int(tot_len*train_frac), int(tot_len*val_frac), tot_len - int(tot_len*train_frac) -  int(tot_len*val_frac)])
-    
-    train_loader = torch.utils.data.DataLoader(train, batch_size = batch_size, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val, batch_size = batch_size, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test, batch_size = batch_size, shuffle=True)
-    
-    return train_loader, val_loader, test_loader
+    # Calculate sizes ensuring they sum to total length
+    train_size = int(tot_len * train_frac)
+    val_size = tot_len - train_size  # Use remainder for validation to avoid rounding issues
+
+    # Split into train and validation only (test set not needed)
+    train, val = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    train_loader = torch.utils.data.DataLoader(train, batch_size=batch_size, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(val, batch_size=batch_size, shuffle=True)
+
+    # Return None for test_loader since it's not used
+    return train_loader, val_loader, None
     
 def validate(model, dataloader, prior_mean, prior_var, n_topics, sparse_ten = False, reg_lambda=0.1, trace_min=5.0):
     val_loss_lis = []

@@ -234,17 +234,34 @@ class TNTMTrainer:
         Builds the TNTM model using the low-dimensional embeddings and initializations
         computed during data preparation.
         """
+        # Check for NaN/Inf in initialization parameters
+        if torch.isnan(self.mus_init).any() or torch.isinf(self.mus_init).any():
+            print("WARNING: NaN or Inf detected in mus_init, replacing with zeros")
+            self.mus_init = torch.zeros_like(self.mus_init)
+
+        if torch.isnan(self.L_lower_init).any() or torch.isinf(self.L_lower_init).any():
+            print("WARNING: NaN or Inf detected in L_lower_init, replacing with small values")
+            self.L_lower_init = torch.randn_like(self.L_lower_init) * 0.01
+
+        if torch.isnan(self.log_diag_init).any() or torch.isinf(self.log_diag_init).any():
+            print("WARNING: NaN or Inf detected in log_diag_init, replacing with default")
+            self.log_diag_init = torch.ones_like(self.log_diag_init) * self.log_diag_init_eps
+
         self.model = TNTM_inference.TNTM_bow(
             embeddings      = self.embeddings_proj_ten.to(self.device),
                    mus_init       = self.mus_init.to(self.device),
                    lower_init     = self.L_lower_init.to(self.device),
-                   log_diag_init  = self.log_diag_init,
+                   log_diag_init  = self.log_diag_init.to(self.device),
                    config         = self.train_config,
                    prior_mean     = self.prior_mean.to(self.device),
                    prior_variance = self.prior_var.to(self.device),
                    use_hybrid     = self.use_hybrid,
                    beta_prodlda_init = None  # Let the model initialize it
                    ).to(self.device)
+
+        print(f"Model built successfully on device: {self.device}")
+        print(f"Model parameters: encoder={sum(p.numel() for p in self.model.encoder.parameters())}, "
+              f"decoder={sum(p.numel() for p in self.model.decoder.parameters())}")
 
 
     def train(self):

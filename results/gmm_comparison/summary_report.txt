@@ -1,0 +1,562 @@
+================================================================================
+GMM COMPARISON ANALYSIS - SUMMARY REPORT
+================================================================================
+
+Generated: 2025-10-30 17:13:22
+
+Total clusters analyzed: 58
+
+BEST NUMBER OF COMPONENTS (by BIC):
+----------------------------------------
+  1 component(s): 51 clusters (87.9%)
+  2 component(s): 4 clusters (6.9%)
+  3 component(s): 3 clusters (5.2%)
+  4 component(s): 0 clusters (0.0%)
+
+BEST NUMBER OF COMPONENTS (by AIC):
+----------------------------------------
+  1 component(s): 52 clusters (89.7%)
+  2 component(s): 3 clusters (5.2%)
+  3 component(s): 3 clusters (5.2%)
+  4 component(s): 0 clusters (0.0%)
+
+================================================================================
+DETAILED RESULTS PER CLUSTER
+================================================================================
+
+Cluster 4:
+  Domains: 4/5
+  Best model (BIC): 1 components (BIC=-284.40)
+  Best model (AIC): 1 components (AIC=-244.50)
+  All fits:
+    1 comp: BIC=-284.40, AIC=-244.50, LL=187.25 *
+    2 comp: BIC=-255.04, AIC=-174.64, LL=218.32
+    3 comp: BIC=-197.69, AIC=-76.79, LL=235.39
+    4 comp: BIC=-106.19, AIC=55.21, LL=235.39
+
+Cluster 6:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-199.39)
+  Best model (AIC): 1 components (AIC=-140.80)
+  All fits:
+    1 comp: BIC=-199.39, AIC=-140.80, LL=135.40 *
+    2 comp: BIC=-182.55, AIC=-64.47, LL=163.24
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 7:
+  Domains: 2/5
+  Best model (BIC): 1 components (BIC=-178.73)
+  Best model (AIC): 1 components (AIC=-93.79)
+  All fits:
+    1 comp: BIC=-178.73, AIC=-93.79, LL=111.89 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 10:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-199.39)
+  Best model (AIC): 1 components (AIC=-140.80)
+  All fits:
+    1 comp: BIC=-199.39, AIC=-140.80, LL=135.40 *
+    2 comp: BIC=-182.55, AIC=-64.47, LL=163.24
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 11:
+  Domains: 2/5
+  Best model (BIC): 1 components (BIC=-178.73)
+  Best model (AIC): 1 components (AIC=-93.79)
+  All fits:
+    1 comp: BIC=-178.73, AIC=-93.79, LL=111.89 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 13:
+  Domains: 3/6
+  Best model (BIC): 1 components (BIC=-209.43)
+  Best model (AIC): 1 components (AIC=-150.84)
+  All fits:
+    1 comp: BIC=-209.43, AIC=-150.84, LL=140.42 *
+    2 comp: BIC=-185.26, AIC=-67.18, LL=164.59
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 14:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-196.29)
+  Best model (AIC): 1 components (AIC=-137.70)
+  All fits:
+    1 comp: BIC=-196.29, AIC=-137.70, LL=133.85 *
+    2 comp: BIC=-180.47, AIC=-62.38, LL=162.19
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 15:
+  Domains: 2/5
+  Best model (BIC): 1 components (BIC=-178.73)
+  Best model (AIC): 1 components (AIC=-93.79)
+  All fits:
+    1 comp: BIC=-178.73, AIC=-93.79, LL=111.89 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 20:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-166.62)
+  Best model (AIC): 1 components (AIC=-81.68)
+  All fits:
+    1 comp: BIC=-166.62, AIC=-81.68, LL=105.84 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 23:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-209.38)
+  Best model (AIC): 1 components (AIC=-150.79)
+  All fits:
+    1 comp: BIC=-209.38, AIC=-150.79, LL=140.40 *
+    2 comp: BIC=-185.95, AIC=-67.87, LL=164.93
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 24:
+  Domains: 5/7
+  Best model (BIC): 1 components (BIC=-313.71)
+  Best model (AIC): 1 components (AIC=-288.33)
+  All fits:
+    1 comp: BIC=-313.71, AIC=-288.33, LL=209.16 *
+    2 comp: BIC=-278.10, AIC=-226.94, LL=244.47
+    3 comp: BIC=-232.89, AIC=-155.95, LL=274.97
+    4 comp: BIC=-146.51, AIC=-43.79, LL=284.90
+
+Cluster 27:
+  Domains: 3/4
+  Best model (BIC): 1 components (BIC=-220.83)
+  Best model (AIC): 1 components (AIC=-162.24)
+  All fits:
+    1 comp: BIC=-220.83, AIC=-162.24, LL=146.12 *
+    2 comp: BIC=-191.29, AIC=-73.21, LL=167.61
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 29:
+  Domains: 4/7
+  Best model (BIC): 1 components (BIC=-251.01)
+  Best model (AIC): 1 components (AIC=-211.12)
+  All fits:
+    1 comp: BIC=-251.01, AIC=-211.12, LL=170.56 *
+    2 comp: BIC=-228.37, AIC=-147.97, LL=204.99
+    3 comp: BIC=-180.10, AIC=-59.20, LL=226.60
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 31:
+  Domains: 4/6
+  Best model (BIC): 1 components (BIC=-287.68)
+  Best model (AIC): 1 components (AIC=-247.78)
+  All fits:
+    1 comp: BIC=-287.68, AIC=-247.78, LL=188.89 *
+    2 comp: BIC=-238.80, AIC=-158.40, LL=210.20
+    3 comp: BIC=-181.92, AIC=-61.02, LL=227.51
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 34:
+  Domains: 2/5
+  Best model (BIC): 1 components (BIC=-165.66)
+  Best model (AIC): 1 components (AIC=-80.72)
+  All fits:
+    1 comp: BIC=-165.66, AIC=-80.72, LL=105.36 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 35:
+  Domains: 8/11
+  Best model (BIC): 2 components (BIC=-461.31)
+  Best model (AIC): 2 components (AIC=-471.71)
+  All fits:
+    1 comp: BIC=-366.90, AIC=-372.06, LL=251.03
+    2 comp: BIC=-461.31, AIC=-471.71, LL=366.86 *
+    3 comp: BIC=-376.22, AIC=-391.87, LL=392.94
+    4 comp: BIC=-306.80, AIC=-327.69, LL=426.85
+
+Cluster 36:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-208.97)
+  Best model (AIC): 1 components (AIC=-150.38)
+  All fits:
+    1 comp: BIC=-208.97, AIC=-150.38, LL=140.19 *
+    2 comp: BIC=-190.57, AIC=-72.49, LL=167.24
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 37:
+  Domains: 4/6
+  Best model (BIC): 1 components (BIC=-224.61)
+  Best model (AIC): 1 components (AIC=-184.72)
+  All fits:
+    1 comp: BIC=-224.61, AIC=-184.72, LL=157.36 *
+    2 comp: BIC=-215.40, AIC=-135.01, LL=198.50
+    3 comp: BIC=-174.00, AIC=-53.10, LL=223.55
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 38:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-199.55)
+  Best model (AIC): 1 components (AIC=-140.96)
+  All fits:
+    1 comp: BIC=-199.55, AIC=-140.96, LL=135.48 *
+    2 comp: BIC=-182.05, AIC=-63.96, LL=162.98
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 39:
+  Domains: 4/5
+  Best model (BIC): 1 components (BIC=-255.88)
+  Best model (AIC): 1 components (AIC=-215.99)
+  All fits:
+    1 comp: BIC=-255.88, AIC=-215.99, LL=172.99 *
+    2 comp: BIC=-235.16, AIC=-154.77, LL=208.38
+    3 comp: BIC=-176.01, AIC=-55.11, LL=224.56
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 41:
+  Domains: 2/4
+  Best model (BIC): 1 components (BIC=-178.73)
+  Best model (AIC): 1 components (AIC=-93.79)
+  All fits:
+    1 comp: BIC=-178.73, AIC=-93.79, LL=111.89 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 42:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-163.21)
+  Best model (AIC): 1 components (AIC=-78.27)
+  All fits:
+    1 comp: BIC=-163.21, AIC=-78.27, LL=104.13 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 43:
+  Domains: 5/7
+  Best model (BIC): 2 components (BIC=-273.23)
+  Best model (AIC): 2 components (AIC=-222.07)
+  All fits:
+    1 comp: BIC=-233.71, AIC=-208.32, LL=169.16
+    2 comp: BIC=-273.23, AIC=-222.07, LL=242.03 *
+    3 comp: BIC=-215.74, AIC=-138.80, LL=266.40
+    4 comp: BIC=-135.43, AIC=-32.71, LL=279.36
+
+Cluster 44:
+  Domains: 3/4
+  Best model (BIC): 1 components (BIC=-208.46)
+  Best model (AIC): 1 components (AIC=-149.87)
+  All fits:
+    1 comp: BIC=-208.46, AIC=-149.87, LL=139.93 *
+    2 comp: BIC=-187.46, AIC=-69.38, LL=165.69
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 45:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-166.85)
+  Best model (AIC): 1 components (AIC=-81.91)
+  All fits:
+    1 comp: BIC=-166.85, AIC=-81.91, LL=105.95 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 46:
+  Domains: 5/7
+  Best model (BIC): 1 components (BIC=-352.35)
+  Best model (AIC): 1 components (AIC=-326.96)
+  All fits:
+    1 comp: BIC=-352.35, AIC=-326.96, LL=228.48 *
+    2 comp: BIC=-311.31, AIC=-260.15, LL=261.08
+    3 comp: BIC=-235.71, AIC=-158.77, LL=276.39
+    4 comp: BIC=-144.86, AIC=-42.15, LL=284.07
+
+Cluster 47:
+  Domains: 4/7
+  Best model (BIC): 1 components (BIC=-237.34)
+  Best model (AIC): 1 components (AIC=-197.45)
+  All fits:
+    1 comp: BIC=-237.34, AIC=-197.45, LL=163.72 *
+    2 comp: BIC=-226.55, AIC=-146.15, LL=204.08
+    3 comp: BIC=-177.00, AIC=-56.10, LL=225.05
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 49:
+  Domains: 8/10
+  Best model (BIC): 1 components (BIC=-519.78)
+  Best model (AIC): 1 components (AIC=-524.94)
+  All fits:
+    1 comp: BIC=-519.78, AIC=-524.94, LL=327.47 *
+    2 comp: BIC=-507.29, AIC=-517.70, LL=389.85
+    3 comp: BIC=-431.16, AIC=-446.81, LL=420.41
+    4 comp: BIC=-324.54, AIC=-345.44, LL=435.72
+
+Cluster 50:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-197.73)
+  Best model (AIC): 1 components (AIC=-139.14)
+  All fits:
+    1 comp: BIC=-197.73, AIC=-139.14, LL=134.57 *
+    2 comp: BIC=-181.00, AIC=-62.92, LL=162.46
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 51:
+  Domains: 4/6
+  Best model (BIC): 1 components (BIC=-292.63)
+  Best model (AIC): 1 components (AIC=-252.74)
+  All fits:
+    1 comp: BIC=-292.63, AIC=-252.74, LL=191.37 *
+    2 comp: BIC=-255.68, AIC=-175.28, LL=218.64
+    3 comp: BIC=-181.92, AIC=-61.02, LL=227.51
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 53:
+  Domains: 8/18
+  Best model (BIC): 3 components (BIC=-332.32)
+  Best model (AIC): 3 components (AIC=-347.97)
+  All fits:
+    1 comp: BIC=-312.81, AIC=-317.97, LL=223.98
+    2 comp: BIC=-305.38, AIC=-315.78, LL=288.89
+    3 comp: BIC=-332.32, AIC=-347.97, LL=370.98 *
+    4 comp: BIC=-264.61, AIC=-285.51, LL=405.75
+
+Cluster 57:
+  Domains: 2/5
+  Best model (BIC): 1 components (BIC=-169.76)
+  Best model (AIC): 1 components (AIC=-84.82)
+  All fits:
+    1 comp: BIC=-169.76, AIC=-84.82, LL=107.41 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 58:
+  Domains: 6/12
+  Best model (BIC): 3 components (BIC=-244.81)
+  Best model (AIC): 3 components (AIC=-203.78)
+  All fits:
+    1 comp: BIC=-201.71, AIC=-188.17, LL=159.09
+    2 comp: BIC=-217.77, AIC=-190.49, LL=226.25
+    3 comp: BIC=-244.81, AIC=-203.78, LL=298.89 *
+    4 comp: BIC=-153.16, AIC=-98.39, LL=312.20
+
+Cluster 59:
+  Domains: 12/17
+  Best model (BIC): 3 components (BIC=-560.59)
+  Best model (AIC): 3 components (AIC=-656.12)
+  All fits:
+    1 comp: BIC=-308.02, AIC=-339.54, LL=234.77
+    2 comp: BIC=-545.54, AIC=-609.07, LL=435.53
+    3 comp: BIC=-560.59, AIC=-656.12, LL=525.06 *
+    4 comp: BIC=-488.44, AIC=-615.97, LL=570.98
+
+Cluster 60:
+  Domains: 4/6
+  Best model (BIC): 1 components (BIC=-256.87)
+  Best model (AIC): 1 components (AIC=-216.97)
+  All fits:
+    1 comp: BIC=-256.87, AIC=-216.97, LL=173.49 *
+    2 comp: BIC=-234.82, AIC=-154.43, LL=208.21
+    3 comp: BIC=-176.23, AIC=-55.33, LL=224.67
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 61:
+  Domains: 4/6
+  Best model (BIC): 1 components (BIC=-213.81)
+  Best model (AIC): 1 components (AIC=-173.92)
+  All fits:
+    1 comp: BIC=-213.81, AIC=-173.92, LL=151.96 *
+    2 comp: BIC=-204.36, AIC=-123.97, LL=192.98
+    3 comp: BIC=-167.64, AIC=-46.74, LL=220.37
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 62:
+  Domains: 4/11
+  Best model (BIC): 1 components (BIC=-221.07)
+  Best model (AIC): 1 components (AIC=-181.18)
+  All fits:
+    1 comp: BIC=-221.07, AIC=-181.18, LL=155.59 *
+    2 comp: BIC=-209.92, AIC=-129.52, LL=195.76
+    3 comp: BIC=-170.00, AIC=-49.10, LL=221.55
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 64:
+  Domains: 4/11
+  Best model (BIC): 1 components (BIC=-230.94)
+  Best model (AIC): 1 components (AIC=-191.05)
+  All fits:
+    1 comp: BIC=-230.94, AIC=-191.05, LL=160.53 *
+    2 comp: BIC=-214.96, AIC=-134.56, LL=198.28
+    3 comp: BIC=-171.83, AIC=-50.93, LL=222.46
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 66:
+  Domains: 4/6
+  Best model (BIC): 1 components (BIC=-232.98)
+  Best model (AIC): 1 components (AIC=-193.09)
+  All fits:
+    1 comp: BIC=-232.98, AIC=-193.09, LL=161.55 *
+    2 comp: BIC=-218.66, AIC=-138.26, LL=200.13
+    3 comp: BIC=-176.61, AIC=-55.71, LL=224.86
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 68:
+  Domains: 3/11
+  Best model (BIC): 1 components (BIC=-204.83)
+  Best model (AIC): 1 components (AIC=-146.24)
+  All fits:
+    1 comp: BIC=-204.83, AIC=-146.24, LL=138.12 *
+    2 comp: BIC=-183.90, AIC=-65.82, LL=163.91
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 69:
+  Domains: 2/4
+  Best model (BIC): 1 components (BIC=-178.73)
+  Best model (AIC): 1 components (AIC=-93.79)
+  All fits:
+    1 comp: BIC=-178.73, AIC=-93.79, LL=111.89 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 71:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-168.65)
+  Best model (AIC): 1 components (AIC=-83.70)
+  All fits:
+    1 comp: BIC=-168.65, AIC=-83.70, LL=106.85 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 74:
+  Domains: 2/4
+  Best model (BIC): 1 components (BIC=-167.80)
+  Best model (AIC): 1 components (AIC=-82.85)
+  All fits:
+    1 comp: BIC=-167.80, AIC=-82.85, LL=106.43 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 75:
+  Domains: 4/7
+  Best model (BIC): 2 components (BIC=-243.33)
+  Best model (AIC): 1 components (AIC=-198.74)
+  All fits:
+    1 comp: BIC=-238.63, AIC=-198.74, LL=164.37
+    2 comp: BIC=-243.33, AIC=-162.93, LL=212.47 *
+    3 comp: BIC=-176.61, AIC=-55.71, LL=224.86
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 77:
+  Domains: 7/9
+  Best model (BIC): 2 components (BIC=-384.27)
+  Best model (AIC): 2 components (AIC=-377.19)
+  All fits:
+    1 comp: BIC=-339.49, AIC=-335.97, LL=232.99
+    2 comp: BIC=-384.27, AIC=-377.19, LL=319.59 *
+    3 comp: BIC=-337.01, AIC=-326.36, LL=360.18
+    4 comp: BIC=-248.72, AIC=-234.50, LL=380.25
+
+Cluster 78:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-163.90)
+  Best model (AIC): 1 components (AIC=-78.96)
+  All fits:
+    1 comp: BIC=-163.90, AIC=-78.96, LL=104.48 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 86:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-194.50)
+  Best model (AIC): 1 components (AIC=-109.55)
+  All fits:
+    1 comp: BIC=-194.50, AIC=-109.55, LL=119.78 *
+    2 comp: BIC=-148.75, AIC=22.45, LL=119.78
+
+Cluster 94:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-166.54)
+  Best model (AIC): 1 components (AIC=-81.60)
+  All fits:
+    1 comp: BIC=-166.54, AIC=-81.60, LL=105.80 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 101:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-228.74)
+  Best model (AIC): 1 components (AIC=-170.15)
+  All fits:
+    1 comp: BIC=-228.74, AIC=-170.15, LL=150.08 *
+    2 comp: BIC=-190.66, AIC=-72.58, LL=167.29
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 102:
+  Domains: 2/4
+  Best model (BIC): 1 components (BIC=-168.01)
+  Best model (AIC): 1 components (AIC=-83.06)
+  All fits:
+    1 comp: BIC=-168.01, AIC=-83.06, LL=106.53 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 103:
+  Domains: 3/6
+  Best model (BIC): 1 components (BIC=-219.36)
+  Best model (AIC): 1 components (AIC=-160.77)
+  All fits:
+    1 comp: BIC=-219.36, AIC=-160.77, LL=145.38 *
+    2 comp: BIC=-187.76, AIC=-69.67, LL=165.84
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 106:
+  Domains: 3/7
+  Best model (BIC): 1 components (BIC=-206.83)
+  Best model (AIC): 1 components (AIC=-148.24)
+  All fits:
+    1 comp: BIC=-206.83, AIC=-148.24, LL=139.12 *
+    2 comp: BIC=-186.73, AIC=-68.65, LL=165.32
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 112:
+  Domains: 4/5
+  Best model (BIC): 1 components (BIC=-227.28)
+  Best model (AIC): 1 components (AIC=-187.39)
+  All fits:
+    1 comp: BIC=-227.28, AIC=-187.39, LL=158.69 *
+    2 comp: BIC=-216.42, AIC=-136.02, LL=199.01
+    3 comp: BIC=-170.99, AIC=-50.09, LL=222.05
+    4 comp: BIC=-103.42, AIC=57.99, LL=234.01
+
+Cluster 113:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-216.65)
+  Best model (AIC): 1 components (AIC=-158.06)
+  All fits:
+    1 comp: BIC=-216.65, AIC=-158.06, LL=144.03 *
+    2 comp: BIC=-191.79, AIC=-73.71, LL=167.85
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 117:
+  Domains: 3/4
+  Best model (BIC): 1 components (BIC=-217.04)
+  Best model (AIC): 1 components (AIC=-158.45)
+  All fits:
+    1 comp: BIC=-217.04, AIC=-158.45, LL=144.22 *
+    2 comp: BIC=-187.21, AIC=-69.13, LL=165.56
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 118:
+  Domains: 2/3
+  Best model (BIC): 1 components (BIC=-177.09)
+  Best model (AIC): 1 components (AIC=-92.14)
+  All fits:
+    1 comp: BIC=-177.09, AIC=-92.14, LL=111.07 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+Cluster 119:
+  Domains: 3/5
+  Best model (BIC): 1 components (BIC=-205.94)
+  Best model (AIC): 1 components (AIC=-147.35)
+  All fits:
+    1 comp: BIC=-205.94, AIC=-147.35, LL=138.68 *
+    2 comp: BIC=-184.51, AIC=-66.43, LL=164.21
+    3 comp: BIC=-136.31, AIC=41.26, LL=176.37
+
+Cluster 123:
+  Domains: 2/4
+  Best model (BIC): 1 components (BIC=-163.00)
+  Best model (AIC): 1 components (AIC=-78.06)
+  All fits:
+    1 comp: BIC=-163.00, AIC=-78.06, LL=104.03 *
+    2 comp: BIC=-145.98, AIC=25.22, LL=118.39
+
+================================================================================
+KEY FINDINGS
+================================================================================
+
+✓ 51/58 (87.9%) clusters are best fit by a single Gaussian.
+  → Single Gaussian appears sufficient for most clusters.
+
+Average optimal number of components: 1.17
+
