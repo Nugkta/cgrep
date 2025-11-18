@@ -6,8 +6,8 @@ cgrep implements the experimental codebase for investigating **cross-granularity
 The repository centers on **BiGCARP**, a ByteNet-based masked language model trained at the Pfam domain level on ~127,000 BGCs from the antiSMASH database, and investigates its integration with **ESM**, a state-of-the-art amino acid-level protein language model trained on billions of sequences. Through representation analysis (CKA, UMAP) and a suite of probe tasks (product classification, A-domain substrate prediction, halogenation detection), we demonstrate that:
 
 1. **Fine-grained (ESM) and coarse-grained (BiGCARP) models capture complementary biological knowledge** — ESM encodes local sequence patterns while BiGCARP captures long-range dependencies across entire BGCs.
-2. **Cross-granularity integration improves performance** — combining representations from both models yields measurable gains in intermediate-level prediction tasks.
-3. **Deeper-layer embeddings are more faithful** — last-layer representations better capture a model's learned knowledge compared to initial embedding layers, explaining why straightforward embedding initialization strategies may fail.
+2. **Cross-granularity integration improves performance** — combining representations from both models yields measurable gains in intermediate-level prediction tasks (BGC product prediction).
+3. **Deeper-layer embeddings are more faithful** — last-layer (or higher-layers) representations better capture a model's learned knowledge compared to initial embedding layers, explaining why straightforward embedding initialization strategies may fail.
 
 For detailed methodology and experimental results, see the accompanying manuscript in `cgrep_paper.pdf`.
 
@@ -30,8 +30,7 @@ The `scripts/` directory contains the most important scripts for running the pro
 
 ## Getting Started
 - **Prerequisites:** Python 3.10, Conda (or mamba), CUDA-capable GPU for model training, and adequate disk space for artefacts. Network access is required for installing optional dependencies (`protein-sequence-models`, `centered-kernel-alignment`).
-- **Environment:** Follow `environment_setup.md` for a tested dependency stack. Quick start:
-- **GPU notebooks (optional):** Submit `start_jupyter.sh` to your SLURM queue and tunnel to the printed hostname.
+- **Environment:** Follow `environment_setup.md` for a tested dependency stack.
 
 ## Data Preparation
 The code expects tokenised BGC corpora and vocabularies in CSV/JSON form:
@@ -133,13 +132,12 @@ Checkpoints, metrics (`metrics.csv`), and plots (`loss_plot.png`) are written un
 - Publication-ready figures and summary tables (CKA, classification, property prediction) live in `results/`.
 - Logs from long training jobs can be routed to `logs/` (not version-controlled by default).
 
-## Notebooks
-Preprocessing notebooks for MIBiG releases sit in `notebooks/bgc_classification/`. Launch them inside the configured environment (`conda activate cgrep`) or via the SLURM-based Jupyter job.
 
-## Referencing
+
+<!-- ## Referencing
 If you use this code or reproduce figures, please cite the accompanying work:
 
 > Hanlin et al., *Cross-Granularity Representation Learning for Natural Product Biosynthesis*, 2024. (See `cgrep_paper.pdf`.)
 
-Check the manuscript for experiment-specific hyperparameters and dataset details.
+Check the manuscript for experiment-specific hyperparameters and dataset details. -->
 

@@ -167,7 +167,9 @@ results/mibig3_bootstrap_evaluation/
 !results/mibig1_bootstrap_evaluation/bootstrap_analysis/mibig1_bootstrap_summary.csv
 !results/mibig3_bootstrap_evaluation/bootstrap_analysis/mibig3_bootstrap_summary.csv
 external/protein-sequence-models
+external/iPRESTO/
 results/bgc_classification/**
+results/subcluster_generation/
 
 # Fine-tuning experiments
 scripts/classification/fine_tuning/
@@ -175,3 +177,4 @@ scripts/classification/fine_tuning/
 # MIBiG1 evaluation files (local only)
 scripts/classification/mibig1_stratified_evaluation.py
 scripts/classification/run_mibig1_bootstrap.sh
+scripts/subcluster_generation/generate_subclusters.py
