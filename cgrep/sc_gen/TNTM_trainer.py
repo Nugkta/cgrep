@@ -72,6 +72,7 @@ class TNTMTrainer:
                  reg_lambda: float = 0.1,           # Regularization coefficient
                  trace_min: float = 0.5,            # Minimum trace threshold for regularization
                  use_hybrid: bool = False,          # Whether to use hybrid beta (Gaussian + ProdLDA)
+                 prodlda_only: bool = False,        # Whether to use only ProdLDA decoder
                  prodlda_lr: float = 1e-3):         # Learning rate for ProdLDA parameters
         """
         Trainer for the TNTM model. This class is responsible for preparing the data,
@@ -139,7 +140,10 @@ class TNTMTrainer:
         self.trace_min = trace_min  # Updated from v_min to trace_min
 
         # Hybrid mode parameters
+        if use_hybrid and prodlda_only:
+            raise ValueError("use_hybrid and prodlda_only cannot both be True.")
         self.use_hybrid = use_hybrid
+        self.prodlda_only = prodlda_only
         self.prodlda_lr = prodlda_lr
         
         # These will be set later during data preparation and model building.
@@ -256,6 +260,7 @@ class TNTMTrainer:
                    prior_mean     = self.prior_mean.to(self.device),
                    prior_variance = self.prior_var.to(self.device),
                    use_hybrid     = self.use_hybrid,
+                   prodlda_only   = self.prodlda_only,
                    beta_prodlda_init = None  # Let the model initialize it
                    ).to(self.device)
 
@@ -288,8 +293,16 @@ class TNTMTrainer:
         # Create optimizers for the encoder and decoder.
         opt1 = torch.optim.Adam(self.model.encoder.parameters(), lr=self.enc_lr, betas=(0.99, 0.999))
 
-        # For decoder, separate Gaussian parameters from ProdLDA parameters if using hybrid mode
-        if self.use_hybrid:
+        # Configure decoder optimizers based on chosen mode
+        if self.prodlda_only:
+            for param in [self.model.decoder.mus,
+                          self.model.decoder.L_lower,
+                          self.model.decoder.log_diag]:
+                param.requires_grad_(False)
+            prodlda_params = [self.model.decoder.log_beta_prodlda]
+            opt2 = torch.optim.Adam(prodlda_params, lr=self.prodlda_lr)
+            opt3 = None
+        elif self.use_hybrid:
             # Gaussian parameters (mus, L_lower, log_diag)
             gaussian_params = [
                 self.model.decoder.mus,
@@ -347,13 +360,23 @@ class TNTMTrainer:
         self.L_lower_res = self.model.decoder.L_lower.detach()
         self.log_diag_res = self.model.decoder.log_diag.detach()
 
-        # If using hybrid mode, save lambda weight
+        # If using hybrid mode, save lambda weights
         if self.use_hybrid:
-            self.lambda_weight = torch.sigmoid(self.model.decoder.lambda_logit).item()
-            print(f"\nFinal Lambda weight (Gaussian): {self.lambda_weight:.4f}")
-            print(f"Final Lambda weight (ProdLDA): {1 - self.lambda_weight:.4f}")
+            lambda_weights = torch.sigmoid(self.model.decoder.lambda_logit).detach().cpu()
+            self.lambda_weights = lambda_weights  # Store all weights
+            print(f"\nFinal Lambda weights (Gaussian) - Mean: {lambda_weights.mean():.4f}, "
+                  f"Std: {lambda_weights.std():.4f}, Min: {lambda_weights.min():.4f}, Max: {lambda_weights.max():.4f}")
+            print(f"Final Lambda weights (ProdLDA) - Mean: {(1 - lambda_weights).mean():.4f}, "
+                  f"Std: {(1 - lambda_weights).std():.4f}, Min: {(1 - lambda_weights).min():.4f}, Max: {(1 - lambda_weights).max():.4f}")
 
         # Get top words and their probabilities using the TNTM_inference.get_topwords() function.
+        log_beta_prodlda = None
+        lambda_logit = None
+        if self.use_hybrid or self.prodlda_only:
+            log_beta_prodlda = self.model.decoder.log_beta_prodlda.detach()
+        if self.use_hybrid:
+            lambda_logit = self.model.decoder.lambda_logit.detach()
+
         topwords, probs = TNTM_inference.get_topwords(
             n_topwords=self.n_topwords,
             mus_res=self.mus_res,
@@ -361,7 +384,9 @@ class TNTMTrainer:
             D_log_res=self.log_diag_res,
             emb_vocab_mat=self.embeddings_proj_ten,
             idx2word=self.idx2word,
-            config=self.train_config
+            config=self.train_config,
+            log_beta_prodlda=log_beta_prodlda,
+            lambda_logit=lambda_logit
         )
         self.topwords = topwords
         self.probs = probs

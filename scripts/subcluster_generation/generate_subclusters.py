@@ -110,11 +110,15 @@ def parse_args():
                         help="Use hybrid beta (Gaussian + ProdLDA) for topic modeling")
     parser.add_argument('--prodlda_lr', type=float, default=1e-3,
                         help="Learning rate for ProdLDA parameters")
+    parser.add_argument('--prodlda_only', action='store_true',
+                        help="Use only ProdLDA decoder (no Gaussian contribution)")
     return parser.parse_args()
 
 def main():
     # Parse command-line arguments
     args = parse_args()
+    if args.use_hybrid and args.prodlda_only:
+        raise SystemExit("Cannot enable both hybrid and prodlda-only modes.")
     # Print all the hyperparameters
     print(json.dumps(vars(args), indent=2))
     
@@ -187,7 +191,7 @@ def main():
         dropout_rate_encoder=args.dropout_rate_encoder,
         prior_variance=args.prior_variance,
         prior_mean=None,
-        n_topwords=10,  # Historical parameter; adjust if needed
+        n_topwords=50,  # Historical parameter; adjust if needed
         device="cuda",
         validation_set_size=args.validation_set_size,
         early_stopping=args.early_stopping,
@@ -195,8 +199,9 @@ def main():
         log_diag_init_eps=args.log_diag_init_eps,
         reg_lambda=args.reg_lambda,
         trace_min=args.trace_min,  # Updated from v_min to trace_min
-        use_hybrid=args.use_hybrid,  # New: Use hybrid beta approach
-        prodlda_lr=args.prodlda_lr  # New: Learning rate for ProdLDA parameters
+        use_hybrid=args.use_hybrid,
+        prodlda_only=args.prodlda_only,
+        prodlda_lr=args.prodlda_lr
     )
     
     # Prepare data (e.g., bag-of-words representation, projected embeddings)

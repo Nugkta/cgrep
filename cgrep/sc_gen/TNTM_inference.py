@@ -238,7 +238,17 @@ class Decoder_TNTM(nn.Module):
     config: config dict
     use_hybrid: Whether to use hybrid beta (Gaussian + ProdLDA)
     """
-  def __init__(self, embeddings, mus_init, L_lower_init, log_diag_init, config, use_hybrid=False, beta_prodlda_init=None):
+  def __init__(
+      self,
+      embeddings,
+      mus_init,
+      L_lower_init,
+      log_diag_init,
+      config,
+      use_hybrid=False,
+      prodlda_only=False,
+      beta_prodlda_init=None
+  ):
     """
     embeddings: The precomputed embeddings of every word in the corpus
     mus_init: What to initialize the means with
@@ -249,35 +259,38 @@ class Decoder_TNTM(nn.Module):
     """
     super(Decoder_TNTM, self).__init__()
 
+    if use_hybrid and prodlda_only:
+      raise ValueError("Decoder cannot be both hybrid and ProdLDA-only.")
+
     self.config = config
     self.embeddings = embeddings
     self.use_hybrid = use_hybrid
+    self.use_prodlda_only = prodlda_only
 
     # Gaussian-based parameters (embedding space)
     self.mus = nn.Parameter(mus_init)   #create topic means as learnable paramter
     self.L_lower = nn.Parameter(L_lower_init)   # factor of covariance per topic
     self.log_diag = nn.Parameter(log_diag_init)  # summand for diagonal of covariance
 
-    # ProdLDA-style parameters (if hybrid mode is enabled)
-    if self.use_hybrid:
-      # Get device from mus_init to ensure consistency
+    # ProdLDA-style parameters (if enabled)
+    self.log_beta_prodlda = None
+    self.lambda_logit = None
+    if self.use_hybrid or self.use_prodlda_only:
       device = mus_init.device
 
       if beta_prodlda_init is None:
-        # Initialize with uniform distribution + small noise on the correct device
         beta_prodlda_init = torch.ones(config.n_topics, config.vocab_size, device=device) / config.vocab_size
         beta_prodlda_init += torch.randn(config.n_topics, config.vocab_size, device=device) * 0.01
 
-      # Ensure beta_prodlda_init is positive
       beta_prodlda_init = torch.clamp(beta_prodlda_init, min=1e-10)
 
-      # Store log-space for numerical stability, will softmax in forward
       self.log_beta_prodlda = nn.Parameter(torch.log(beta_prodlda_init))
 
-      # Lambda parameter to weight the two betas (will be passed through sigmoid)
-      self.lambda_logit = nn.Parameter(torch.tensor(0.0, device=device))  # sigmoid(0) = 0.5
-
-      print(f"Hybrid mode enabled: beta_prodlda shape={self.log_beta_prodlda.shape}, device={self.log_beta_prodlda.device}")
+      if self.use_hybrid:
+        self.lambda_logit = nn.Parameter(torch.zeros(config.n_topics, device=device))  # sigmoid(0) = 0.5 for each topic
+        print(f"Hybrid mode enabled: beta_prodlda shape={self.log_beta_prodlda.shape}, lambda_logit shape={self.lambda_logit.shape}, device={self.log_beta_prodlda.device}")
+      elif self.use_prodlda_only:
+        print(f"ProdLDA-only mode enabled: beta_prodlda shape={self.log_beta_prodlda.shape}, device={self.log_beta_prodlda.device}")
 
   def forward(self, theta_hat):
     """
@@ -293,45 +306,43 @@ class Decoder_TNTM(nn.Module):
     # Get device from theta_hat to ensure consistency
     device = theta_hat.device
 
-    # Calculate Gaussian-based log_beta (embedding space)
-    log_beta_gaussian = calc_beta(self.mus, self.L_lower, self.log_diag, self.embeddings, self.config)
+    beta_gaussian = None
+    beta_prodlda = None
 
-    # Check for NaN in log_beta_gaussian
-    if torch.isnan(log_beta_gaussian).any() or torch.isinf(log_beta_gaussian).any():
-      print("WARNING: NaN/Inf in log_beta_gaussian, using uniform distribution")
-      log_beta_gaussian = torch.zeros(self.config.n_topics, self.config.vocab_size, device=device)
+    if not self.use_prodlda_only:
+      log_beta_gaussian = calc_beta(self.mus, self.L_lower, self.log_diag, self.embeddings, self.config)
 
-    # Convert to probabilities: softmax over vocabulary for each topic
-    beta_gaussian = torch.nn.functional.softmax(log_beta_gaussian, dim=-1)  # [n_topics, vocab_size]
+      if torch.isnan(log_beta_gaussian).any() or torch.isinf(log_beta_gaussian).any():
+        print("WARNING: NaN/Inf in log_beta_gaussian, using uniform distribution")
+        log_beta_gaussian = torch.zeros(self.config.n_topics, self.config.vocab_size, device=device)
 
-    # Check for NaN after softmax
-    if torch.isnan(beta_gaussian).any():
-      print("WARNING: NaN in beta_gaussian after softmax, using uniform distribution")
-      beta_gaussian = torch.ones(self.config.n_topics, self.config.vocab_size, device=device) / self.config.vocab_size
+      beta_gaussian = torch.nn.functional.softmax(log_beta_gaussian, dim=-1)
+      if torch.isnan(beta_gaussian).any():
+        print("WARNING: NaN in beta_gaussian after softmax, using uniform distribution")
+        beta_gaussian = torch.ones(self.config.n_topics, self.config.vocab_size, device=device) / self.config.vocab_size
 
-    if self.use_hybrid:
-      # Calculate ProdLDA-style beta (raw word probabilities)
-      # Apply softmax to ensure proper probability distribution over vocabulary
-      beta_prodlda = torch.nn.functional.softmax(self.log_beta_prodlda, dim=-1)  # [n_topics, vocab_size]
-
-      # Check for NaN
+    if self.use_hybrid or self.use_prodlda_only:
+      beta_prodlda = torch.nn.functional.softmax(self.log_beta_prodlda, dim=-1)
       if torch.isnan(beta_prodlda).any():
         print("WARNING: NaN in beta_prodlda, using uniform distribution")
         beta_prodlda = torch.ones(self.config.n_topics, self.config.vocab_size, device=device) / self.config.vocab_size
 
-      # Get lambda weight (constrained to [0, 1])
-      lambda_weight = torch.sigmoid(self.lambda_logit)
-
-      # Check for NaN in lambda
-      if torch.isnan(lambda_weight):
-        print("WARNING: NaN in lambda_weight, using 0.5")
-        lambda_weight = torch.tensor(0.5, device=device)
-
-      # Combine the two betas in probability space
-      # β_hybrid = λ * β_gaussian + (1-λ) * β_prodlda
-      beta = lambda_weight * beta_gaussian + (1 - lambda_weight) * beta_prodlda  # [n_topics, vocab_size]
+    if self.use_prodlda_only:
+      beta = beta_prodlda
+    elif self.use_hybrid:
+      lambda_weight = torch.sigmoid(self.lambda_logit)  # Shape: [n_topics]
+      if torch.isnan(lambda_weight).any():
+        print("WARNING: NaN in lambda_weight, replacing NaN values with 0.5")
+        lambda_weight = torch.where(torch.isnan(lambda_weight),
+                                     torch.tensor(0.5, device=device),
+                                     lambda_weight)
+      # Reshape to [n_topics, 1] for broadcasting across vocab dimension
+      lambda_weight = lambda_weight.unsqueeze(-1)
+      beta = lambda_weight * beta_gaussian + (1 - lambda_weight) * beta_prodlda
     else:
-      # Use only Gaussian-based beta
+      beta = beta_gaussian
+
+    if beta is None:
       beta = beta_gaussian
 
     # Check beta validity
@@ -361,15 +372,17 @@ class TNTM_bow(nn.Module):
   """
 
   def __init__(self, config, embeddings, mus_init, lower_init, log_diag_init, prior_mean, prior_variance,
-               use_hybrid=False, beta_prodlda_init=None):
+               use_hybrid=False, prodlda_only=False, beta_prodlda_init=None):
     super(TNTM_bow, self).__init__()
 
     self.config = config
     self.use_hybrid = use_hybrid
+    self.use_prodlda_only = prodlda_only
 
     self.encoder = Encoder_NVLDA(config)  # use same encoder as for NVLDA
     self.decoder = Decoder_TNTM(embeddings, mus_init, lower_init, log_diag_init, config,
-                                use_hybrid=use_hybrid, beta_prodlda_init=beta_prodlda_init)  # Use decoder with optional hybrid mode
+                                use_hybrid=use_hybrid, prodlda_only=prodlda_only,
+                                beta_prodlda_init=beta_prodlda_init)  # Use decoder with optional hybrid mode
 
     self.prior_mean = prior_mean
     self.prior_variance = prior_variance
@@ -552,12 +565,13 @@ def loss_elbo(input, log_recon, posterior_mean, posterior_logvar,
     KLD_avg = torch.mean(KLD)
     base_loss = (NL + KLD).mean()
     
-    # Trace of covariance = sum of squares in L_lower + sum of exp(log_diag)
-    cov_trace = (model.decoder.L_lower**2).sum() + torch.exp(model.decoder.log_diag).sum()
-    
-    # Soft penalty if trace < trace_min
-    below_min = torch.clamp(trace_min - cov_trace, min=0)
-    trace_penalty = below_min**2
+    if getattr(model.decoder, "use_prodlda_only", False):
+      cov_trace = torch.tensor(0.0, device=base_loss.device, dtype=base_loss.dtype)
+      trace_penalty = torch.tensor(0.0, device=base_loss.device, dtype=base_loss.dtype)
+    else:
+      cov_trace = (model.decoder.L_lower**2).sum() + torch.exp(model.decoder.log_diag).sum()
+      below_min = torch.clamp(trace_min - cov_trace, min=0)
+      trace_penalty = below_min**2
     
     # Total loss
     loss = base_loss + reg_lambda * trace_penalty
@@ -804,10 +818,13 @@ def train_loop(model, optimizer1, optimizer2, trainset, valset, print_mod, devic
         writer.add_scalar('Train/GradNorm_median', grad_norm_median, epoch)
         writer.add_scalar('Train/GradNorm_max', grad_norm_max, epoch)
 
-        # Log lambda weight if using hybrid mode
-        if hasattr(model.decoder, 'lambda_logit'):
-            lambda_weight = torch.sigmoid(model.decoder.lambda_logit).item()
-            writer.add_scalar('Train/Lambda_weight', lambda_weight, epoch)
+        # Log lambda weights if using hybrid mode
+        if getattr(model.decoder, 'lambda_logit', None) is not None:
+            lambda_weights = torch.sigmoid(model.decoder.lambda_logit)
+            writer.add_scalar('Train/Lambda_weight_mean', lambda_weights.mean().item(), epoch)
+            writer.add_scalar('Train/Lambda_weight_std', lambda_weights.std().item(), epoch)
+            writer.add_scalar('Train/Lambda_weight_min', lambda_weights.min().item(), epoch)
+            writer.add_scalar('Train/Lambda_weight_max', lambda_weights.max().item(), epoch)
 
         # Save the epoch metrics.
         train_metrics["loss"].append(train_loss_mean)
@@ -849,10 +866,10 @@ def train_loop(model, optimizer1, optimizer2, trainset, valset, print_mod, devic
                        f"Validation Loss: {val_loss_mean:.4f} (median: {val_loss_median:.4f}) | "
                        f"Grad Norms (mean: {grad_norm_mean:.4f}, median: {grad_norm_median:.4f}, max: {grad_norm_max:.4f})")
 
-            # Add lambda weight if using hybrid mode
-            if hasattr(model.decoder, 'lambda_logit'):
-                lambda_weight = torch.sigmoid(model.decoder.lambda_logit).item()
-                base_msg += f" | λ (Gauss weight): {lambda_weight:.4f}"
+            # Add lambda weights statistics if using hybrid mode
+            if getattr(model.decoder, 'lambda_logit', None) is not None:
+                lambda_weights = torch.sigmoid(model.decoder.lambda_logit)
+                base_msg += f" | λ (Gauss) mean: {lambda_weights.mean().item():.4f}, std: {lambda_weights.std().item():.4f}"
 
             base_msg += f" | Elapsed time: {elapsed:.2f}s"
             print(base_msg)
@@ -903,7 +920,8 @@ def smooth_loss(data, window = 100 ):
     return out
     
 
-def get_topwords(n_topwords, mus_res, L_lower_res, D_log_res, emb_vocab_mat, idx2word, config):
+def get_topwords(n_topwords, mus_res, L_lower_res, D_log_res, emb_vocab_mat, idx2word, config,
+                 log_beta_prodlda=None, lambda_logit=None):
     """
     Compute the topwords according to the paramters of the TLDA model
     
@@ -918,50 +936,44 @@ def get_topwords(n_topwords, mus_res, L_lower_res, D_log_res, emb_vocab_mat, idx
         
     Return a numpy array of shape (n_topics, n_topwords) that contains the topwords of each topic
     """
-    
-    # probs1 = torch.exp(calc_beta(mus_res, L_lower_res, D_log_res, emb_vocab_mat, config))
-    # probs_np = probs1.detach().cpu().numpy()
-    
-    # # build vocab_arr in the original idx order:
-    # vocab_arr = np.array([idx2word[i] for i in range(len(idx2word))])
+    log_beta_gaussian = calc_beta(mus_res, L_lower_res, D_log_res, emb_vocab_mat, config)
+    beta_gaussian = torch.nn.functional.softmax(log_beta_gaussian, dim=-1)
 
-    # # Get indices sorted by descending probability (only once):
-    # args1 = np.argsort(-probs_np, axis=1)
-    
-    # # Limit to top-n words per topic:
-    # args1_topn = args1[:, :n_topwords]
-    
-    # # Create row indices corresponding to each topic 
-    # topic_indices = np.arange(args1_topn.shape[0])[:, np.newaxis]
-    
-    # # words1_sort: get top words per topic
-    # words1_sort = vocab_arr[args1_topn]
-    
-    # # probs1_sort: get corresponding probabilities using proper 2D indexing
-    # probs1_sort = probs_np[topic_indices, args1_topn]
+    if log_beta_prodlda is not None:
+        beta_prodlda = torch.nn.functional.softmax(
+            log_beta_prodlda.to(beta_gaussian.device), dim=-1
+        )
 
-    probs1 = torch.exp(calc_beta(mus_res, L_lower_res, D_log_res, emb_vocab_mat, config))
-    args1 = np.argsort(-probs1.detach().cpu().numpy(), axis = 1)
-    
-    vocab_arr_sorted = np.array(sorted(list(idx2word.values()))) # this line make the vocab sorted alphabetically
-    # check if the vocab_arr is changed by the sorting
-    vocab_arr = np.array(list(idx2word.values()))
-    if not np.array_equal(vocab_arr, vocab_arr_sorted):
-        print("Warning: The vocab_arr is not in the original order. Please check the idx2word mapping.")
+        if lambda_logit is None:
+            # Default: uniform weight of 0.5 for all topics
+            lambda_weight = torch.full((config.n_topics,), 0.5, device=beta_gaussian.device)
+        else:
+            lambda_weight = torch.sigmoid(lambda_logit.to(beta_gaussian.device))
+
+        # Handle both scalar (legacy) and per-topic lambda
+        if isinstance(lambda_weight, torch.Tensor):
+            if lambda_weight.ndim == 0:
+                # Scalar tensor (legacy single lambda)
+                lambda_weight = lambda_weight.item()
+                beta = lambda_weight * beta_gaussian + (1 - lambda_weight) * beta_prodlda
+            else:
+                # Per-topic lambda: reshape to [n_topics, 1] for broadcasting
+                lambda_weight = lambda_weight.view(-1, 1)
+                beta = lambda_weight * beta_gaussian + (1 - lambda_weight) * beta_prodlda
+        else:
+            # Float value (legacy)
+            beta = lambda_weight * beta_gaussian + (1 - lambda_weight) * beta_prodlda
     else:
-        print("The vocab_arr is in the original order")
+        beta = beta_gaussian
 
+    beta = torch.clamp(beta, min=1e-12)
+    k = min(n_topwords, beta.shape[1])
+    topk_vals, topk_idx = torch.topk(beta, k=k, dim=-1)
 
-    # therefore no matter what the input vocab order is the output with prob-sorted index will be the same here
-    words1_sort = np.empty(args1.shape, dtype = vocab_arr.dtype)
-    
-    for t in range(config.n_topics):
-      words1_sort[t] = vocab_arr[args1[t]]
-    
-    probs1_sort = np.empty(probs1.shape)
-    
-    for i in range(len(probs1)):
-      probs1_sort[i] = probs1[i].detach().cpu()[args1[i]]
+    vocab_arr = np.array([idx2word[i] for i in range(len(idx2word))], dtype=object)
+    topk_idx_np = topk_idx.cpu().detach().numpy()
+    words1_sort = vocab_arr[topk_idx_np]
+    probs1_sort = topk_vals.cpu().detach().numpy()
 
     return words1_sort, probs1_sort
 
@@ -1051,12 +1063,18 @@ def load_tntm_model(save_path: str, device: torch.device = None):
     n_topics = train_config.n_topics        # e.g., 20
     embedding_dim = train_config.embedding_dim  # e.g., 11
     
-    # These dummy tensors are only used to initialize the model; they will be overwritten 
+    # These dummy tensors are only used to initialize the model; they will be overwritten
     # when loading the saved state dictionary.
     dummy_mus = torch.zeros(n_topics, embedding_dim, dtype=torch.float32).to(device)           # Shape: [n_topics, embedding_dim]
     dummy_lower = torch.zeros(n_topics, embedding_dim, embedding_dim, dtype=torch.float32).to(device)  # Shape: [n_topics, embedding_dim, embedding_dim]
     dummy_log_diag = torch.zeros(n_topics, embedding_dim, dtype=torch.float32).to(device)        # Shape: [n_topics, embedding_dim]
-    
+
+    # Load the saved state dictionary to check if it contains hybrid mode parameters
+    model_state_dict = torch.load(state_path, map_location=device)
+
+    # Check if the model was trained with hybrid mode
+    use_hybrid = 'decoder.log_beta_prodlda' in model_state_dict
+
     # Instantiate the model using the loaded parameters and dummy initializations.
     model = TNTM_bow(
         embeddings=embeddings_proj,
@@ -1065,11 +1083,11 @@ def load_tntm_model(save_path: str, device: torch.device = None):
         log_diag_init=dummy_log_diag,
         config=train_config,
         prior_mean=prior_mean,
-        prior_variance=prior_variance
+        prior_variance=prior_variance,
+        use_hybrid=use_hybrid
     ).to(device)
-    
+
     # Load the saved state dictionary into the model.
-    model_state_dict = torch.load(state_path, map_location=device)
     model.load_state_dict(model_state_dict)
     
     # Set the model to evaluation mode.
