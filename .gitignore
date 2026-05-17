@@ -178,3 +178,6 @@ scripts/classification/fine_tuning/
 scripts/classification/mibig1_stratified_evaluation.py
 scripts/classification/run_mibig1_bootstrap.sh
 scripts/subcluster_generation/generate_subclusters.py
+
+# Local backup manifest (disk backup only, not for GitHub)
+.backupignore
